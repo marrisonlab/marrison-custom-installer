@@ -3,7 +3,7 @@
  * Plugin Name: Marrison Custom Installer
  * Plugin URI:  https://github.com/marrisonlab/marrison-custom-installer
  * Description: This plugin is used to install plugins from a personal repository.
- * Version: 1.0
+ * Version: 1.2
  * Author: Angelo Marra
  * Author URI:  https://marrisonlab.com
  */
