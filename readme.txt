@@ -4,7 +4,7 @@ Tags: installer, plugin-manager, custom-repository
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.2
+Stable tag: 1.7
 License: GPL-3.0+
 License URI: https://www.gnu.org/licenses/gpl-3.0.txt
 
@@ -23,7 +23,12 @@ GitHub Repository: https://github.com/marrisonlab/marrison-custom-installer
 
 == Changelog ==
 
-= 1.0 =
+= 1.7 =
+* Layout: Grid view changed to 3 columns on desktop.
+* Core: Removed default repository URL (requires manual setup).
+* Fix: Prevented connection attempts when no repository URL is set.
+
+= 1.6 =
 * Initial release as Marrison Custom Installer.
 * Removed private repo plugin update functionality (kept only install/manual update).
 * Removed JSON authorization management.

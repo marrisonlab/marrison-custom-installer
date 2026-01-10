@@ -3,18 +3,17 @@
  * Plugin Name: Marrison Custom Installer
  * Plugin URI:  https://github.com/marrisonlab/marrison-custom-installer
  * Description: This plugin is used to install plugins from a personal repository.
- * Version: 1.2
+ * Version: 1.7
  * Author: Angelo Marra
  * Author URI:  https://marrisonlab.com
  */
 
 class Marrison_Custom_Installer {
 
-    private $repo_url = 'https://marrisonlab.com/wp-repo/';
+    private $repo_url = '';
     private $cache_duration = 6 * HOUR_IN_SECONDS;
 
     public function __construct() {
-        // Hook solo per l'auto-aggiornamento DI QUESTO plugin
         add_filter('site_transient_update_plugins', [$this, 'check_for_updates']);
         add_filter('plugins_api', [$this, 'plugin_info'], 10, 3);
 
@@ -25,25 +24,18 @@ class Marrison_Custom_Installer {
         add_action('admin_post_marrison_save_repo_url', [$this, 'save_repo_url']);
         add_action('admin_post_marrison_force_check_mci', [$this, 'force_check_mci']);
         
-        // Hook per AJAX
         add_action('wp_ajax_marrison_install_plugin_ajax', [$this, 'install_plugin_ajax']);
         add_action('wp_ajax_marrison_bulk_install_ajax', [$this, 'bulk_install_ajax']);
-        // Aggiungi script e stili per la pagina admin
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
         
-        // Hook per aggiungere link al plugin Marrison Installer nella pagina dei plugin
         add_filter('plugin_action_links', [$this, 'add_marrison_action_links'], 10, 2);
         add_filter('plugin_row_meta', [$this, 'add_plugin_row_meta'], 10, 2);
         
-        // Hook per aggiungere notifiche al menu
         add_action('admin_menu', [$this, 'add_menu_notification_badge'], 999);
         add_action('admin_head', [$this, 'add_menu_badge_styles']);
         add_action('admin_init', [$this, 'check_available_installs']);
         
-        // Filtro per abilitare auto-update per questo plugin
         add_filter('auto_update_plugin', [$this, 'auto_update_specific_plugins'], 10, 2);
-        
-        // Hook per pulire la cache GitHub quando si forza il controllo aggiornamenti WP
         add_action('delete_site_transient_update_plugins', [$this, 'force_clear_github_cache']);
     }
 
@@ -58,10 +50,7 @@ class Marrison_Custom_Installer {
         return $update;
     }
 
-    /* ===================== MENU NOTIFICATION BADGE ===================== */
-
     public function check_available_installs() {
-        // Salva il numero di aggiornamenti disponibili in un'opzione per accesso rapido
         $installs = $this->get_available_installs();
         $plugins = get_plugins();
         $update_count = 0;
@@ -87,7 +76,6 @@ class Marrison_Custom_Installer {
         if ($update_count > 0) {
             global $menu;
             
-            // Trova il menu Marrison Installer e aggiungi il conteggio
             foreach ($menu as $key => $item) {
                 if (isset($item[2]) && $item[2] === 'marrison-installer') {
                     $menu[$key][0] .= ' <span class="marrison-install-badge awaiting-mod count-' . $update_count . '">' . $update_count . '</span>';
@@ -117,19 +105,19 @@ class Marrison_Custom_Installer {
 
         .marrison-install-badge {
             display: inline-block;
-            background-color: #d63638;
+            background: linear-gradient(135deg, #d63638 0%, #c72c2f 100%);
             color: #fff;
             font-size: 9px;
             line-height: 17px;
-            font-weight: 600;
+            font-weight: 700;
             margin: 1px 0 0 2px;
             vertical-align: top;
-            -webkit-border-radius: 10px;
             border-radius: 10px;
             z-index: 26;
             min-width: 7px;
             padding: 0 6px;
             text-align: center;
+            box-shadow: 0 2px 4px rgba(214, 54, 56, 0.3);
         }
         
         #adminmenu .marrison-install-badge {
@@ -153,25 +141,23 @@ class Marrison_Custom_Installer {
             background-color: #d63638;
             border-radius: 50%;
             display: <?php echo get_option('marrison_available_installs_count', 0) > 0 ? 'block' : 'none'; ?>;
+            box-shadow: 0 0 0 2px rgba(214, 54, 56, 0.2);
         }
         </style>
         <?php
     }
 
-    /* ===================== UPDATE SOURCE ===================== */
-
     private function get_available_installs() {
         $custom_repo_url = get_option('marrison_repo_url');
         $repo_url = !empty($custom_repo_url) ? trailingslashit($custom_repo_url) : $this->repo_url;
 
-        // Prova a recuperare la cache
+        if (empty($repo_url)) return [];
+
         $cached = get_transient('marrison_available_installs');
         
-        // Se la cache esiste, controlla se è pulita
         if ($cached !== false && is_array($cached)) {
             $is_clean = true;
             foreach ($cached as $u) {
-                // Se troviamo elementi corrotti nella cache, invalida tutto
                 if (isset($u['name']) && (strpos($u['name'], '/i\'') !== false || strpos($u['name'], '$') !== false)) {
                     $is_clean = false;
                     break;
@@ -186,35 +172,26 @@ class Marrison_Custom_Installer {
         $installs = json_decode(wp_remote_retrieve_body($response), true);
         if (!is_array($installs)) return [];
 
-        // Filtra risultati che sembrano contenere codice PHP (errore nel generatore JSON lato server)
         $installs = array_filter($installs, function($u) {
             if (!isset($u['slug'])) return false;
-            // Rimuove elementi con variabili PHP o regex nel nome/versione
             if (isset($u['name']) && (strpos($u['name'], '$') !== false || strpos($u['name'], '/i\'') !== false)) return false;
             if (isset($u['version']) && strpos($u['version'], '$') !== false) return false;
             return true;
         });
 
-        // Re-index array
         $installs = array_values($installs);
 
         set_transient('marrison_available_installs', $installs, $this->cache_duration);
         return $installs;
     }
 
-    /* ===================== WP UPDATE HOOK ===================== */
-
     public function check_for_updates($transient) {
         if (!is_object($transient)) $transient = new stdClass();
         
-        // Assicurati che le proprietà esistano
         if (!isset($transient->response)) $transient->response = [];
         if (!isset($transient->no_update)) $transient->no_update = [];
         if (!isset($transient->checked)) $transient->checked = [];
 
-        // Rimosso loop per aggiornamento plugin da repo privata
-
-        // Controlla anche il plugin stesso da GitHub
         $this->check_self_update($transient);
 
         return $transient;
@@ -247,7 +224,6 @@ class Marrison_Custom_Installer {
         if (version_compare($installed, $remote, '<')) {
             $transient->response[$plugin_file] = $item;
         } else {
-            // Importante: popolare no_update permette a WP di mostrare i controlli per auto-update
             $transient->no_update[$plugin_file] = $item;
         }
 
@@ -289,10 +265,8 @@ class Marrison_Custom_Installer {
     public function plugin_info($false, $action, $args) {
         if ($action !== 'plugin_information') return $false;
         
-        // Controlla se è il nostro plugin
         if ($args->slug !== 'marrison-custom-installer') return $false;
 
-        // Leggi le informazioni dal readme.txt su GitHub
         $response = wp_remote_get('https://raw.githubusercontent.com/marrisonlab/marrison-custom-installer/stable/readme.txt', [
             'timeout' => 10
         ]);
@@ -302,28 +276,24 @@ class Marrison_Custom_Installer {
         $readme = wp_remote_retrieve_body($response);
         if (empty($readme)) return $false;
 
-        // Parsa il readme.txt
         return $this->parse_readme($readme);
     }
 
     private function parse_readme($readme) {
         $info = new stdClass();
         
-        // Estrai la descrizione
         if (preg_match('/== Description ==\s*(.*?)\s*== /s', $readme, $match)) {
             $info->description = trim($match[1]);
         } else {
             $info->description = '';
         }
 
-        // Estrai il changelog
         if (preg_match('/== Changelog ==\s*(.*?)$/s', $readme, $match)) {
             $info->changelog = trim($match[1]);
         } else {
             $info->changelog = '';
         }
 
-        // Dati base
         $github_version = $this->get_github_version();
         $info->name = 'Marrison Custom Installer';
         $info->slug = 'marrison-custom-installer';
@@ -351,19 +321,15 @@ class Marrison_Custom_Installer {
         return $info;
     }
 
-    /* ===================== PLUGIN ACTION LINKS ===================== */
-
     public function add_marrison_action_links($actions, $plugin_file) {
-        // Controlla se è il file del plugin Marrison Custom Installer
         if (strpos($plugin_file, 'custom_installer.php') === false && strpos($plugin_file, 'marrison') === false) {
             return $actions;
         }
 
-        // Link alla pagina del Marrison Installer
         $actions['marrison_settings'] = sprintf(
             '<a href="%s">%s</a>',
             esc_url(admin_url('admin.php?page=marrison-installer')),
-            esc_html__('Setting', 'marrison-custom-installer')
+            esc_html__('Impostazioni', 'marrison-custom-installer')
         );
 
         return $actions;
@@ -372,17 +338,14 @@ class Marrison_Custom_Installer {
     public function add_plugin_row_meta($links, $file) {
         if (strpos($file, 'custom_installer.php') !== false || strpos($file, 'marrison-custom-installer') !== false) {
             $row_meta = [
-                'docs' => '<a href="https://github.com/marrisonlab/marrison-custom-installer" target="_blank" aria-label="' . esc_attr__('Visita il sito del plugin', 'marrison-custom-installer') . '">' . esc_html__('Visita il sito del plugin', 'marrison-custom-installer') . '</a>',
+                'docs' => '<a href="https://github.com/marrisonlab/marrison-custom-installer" target="_blank">' . esc_html__('Visita il sito', 'marrison-custom-installer') . '</a>',
             ];
             return array_merge($links, $row_meta);
         }
         return $links;
     }
 
-    /* ===================== INSTALL ENGINE ===================== */
-
     private function perform_install($slug) {
-
         global $wp_filesystem;
         require_once ABSPATH . 'wp-admin/includes/file.php';
         WP_Filesystem();
@@ -439,7 +402,6 @@ class Marrison_Custom_Installer {
         unzip_file($zip, $upgrade_dir);
         unlink($zip);
 
-        // Trova la cartella estratta (potrebbe avere nome diverso come marrison-custom-installer-v1.5)
         $dirs = glob($upgrade_dir . '/*', GLOB_ONLYDIR);
         if (empty($dirs)) return false;
 
@@ -459,15 +421,11 @@ class Marrison_Custom_Installer {
         return true;
     }
 
-
-
-    /* ===================== ACTIONS ===================== */
-
     public function install_plugin() {
         $slug = sanitize_text_field($_GET['slug'] ?? '');
         check_admin_referer('marrison_install_' . $slug);
 
-        $this->perform_install($slug); // perform_install works for install too if zip is downloaded and extracted
+        $this->perform_install($slug);
 
         wp_redirect(admin_url('admin.php?page=marrison-installer&updated=' . $slug));
         exit;
@@ -502,14 +460,9 @@ class Marrison_Custom_Installer {
     public function force_check_mci() {
         check_admin_referer('marrison_force_check_mci');
         
-        // Pulisce cache specifica GitHub
         delete_transient('marrison_github_version');
-        
-        // Forza controllo aggiornamenti WP
         delete_site_transient('update_plugins');
         wp_clean_plugins_cache(true);
-        
-        // Richiedi aggiornamento immediato (simula cron)
         wp_update_plugins();
         
         $redirect = !empty($_REQUEST['redirect_to']) ? $_REQUEST['redirect_to'] : admin_url('admin.php?page=marrison-installer&mci_checked=1');
@@ -529,7 +482,6 @@ class Marrison_Custom_Installer {
             $redirect_url = admin_url('admin.php?page=marrison-installer-settings&settings-updated=saved');
         }
 
-        // Pulisce la cache dopo aver modificato l'URL
         delete_transient('marrison_available_installs');
         delete_site_transient('update_plugins');
 
@@ -537,14 +489,10 @@ class Marrison_Custom_Installer {
         exit;
     }
 
-    /* ===================== AJAX HANDLER ===================== */
-
     public function install_plugin_ajax() {
-        // Verifica il nonce - accetta sia nonce specifico che generico
         $slug = sanitize_text_field($_POST['slug'] ?? '');
         $nonce = sanitize_text_field($_POST['nonce'] ?? '');
         
-        // Controlla nonce specifico per il plugin o nonce bulk generico
         $nonce_valid = wp_verify_nonce($nonce, 'marrison_install_' . $slug) || 
                        wp_verify_nonce($nonce, 'marrison_bulk_install') ||
                        wp_verify_nonce($nonce, 'marrison_install_marrison-custom-installer');
@@ -553,15 +501,12 @@ class Marrison_Custom_Installer {
             wp_send_json_error('Security check failed');
         }
 
-        // Verifica i permessi
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Insufficient permissions');
         }
 
-        // Esegui l'aggiornamento
         $result = false;
         
-        // Controlla se è il plugin stesso (Marrison Custom Installer)
         if ($slug === 'marrison-custom-installer') {
             $transient = get_site_transient('update_plugins');
             if (isset($transient->response[plugin_basename(__FILE__)])) {
@@ -574,18 +519,13 @@ class Marrison_Custom_Installer {
 
         if ($result) {
             wp_send_json_success('Plugin aggiornato con successo');
-            
-            // Aggiorna il conteggio delle notifiche
             $this->check_available_installs();
         } else {
             wp_send_json_error('Errore durante l\'aggiornamento del plugin');
         }
     }
 
-    /* ===================== BULK UPDATE AJAX HANDLER ===================== */
-
     public function bulk_install_ajax() {
-        // Verifica il nonce
         $nonce = sanitize_text_field($_POST['nonce'] ?? '');
         $plugins = isset($_POST['plugins']) ? array_map('sanitize_text_field', $_POST['plugins']) : [];
         
@@ -593,7 +533,6 @@ class Marrison_Custom_Installer {
             wp_die('Security check failed');
         }
 
-        // Verifica i permessi
         if (!current_user_can('manage_options')) {
             wp_die('Insufficient permissions');
         }
@@ -608,7 +547,6 @@ class Marrison_Custom_Installer {
         foreach ($plugins as $slug) {
             $result = false;
             
-            // Controlla se è il plugin stesso (Marrison Custom Installer)
             if ($slug === 'marrison-custom-installer') {
                 $transient = get_site_transient('update_plugins');
                 if (isset($transient->response[plugin_basename(__FILE__)])) {
@@ -632,26 +570,20 @@ class Marrison_Custom_Installer {
                 'success_count' => $success_count,
                 'total_count' => count($plugins)
             ]);
-            
-            // Aggiorna il conteggio delle notifiche
-            $this->check_for_available_updates();
+            $this->check_available_installs();
         } else {
             wp_send_json_error('Nessun plugin è stato aggiornato');
         }
     }
 
-    /* ===================== ADMIN UI ===================== */
-
     public function enqueue_admin_scripts($hook) {
-        // Carica gli script solo sulla nostra pagina
-        if ($hook !== 'toplevel_page_marrison-installer') {
+        if ($hook !== 'toplevel_page_marrison-installer' && $hook !== 'marrison-installer_page_marrison-installer-settings') {
             return;
         }
         
-        // Assicurati che jQuery sia caricato
         wp_enqueue_script('jquery');
+        wp_enqueue_style('dashicons');
         
-        // Aggiungi lo script per la barra di caricamento
         wp_add_inline_script('jquery', '
             var marrisonInstaller = {
                 ajaxurl: "' . admin_url('admin-ajax.php') . '"
@@ -660,18 +592,16 @@ class Marrison_Custom_Installer {
     }
 
     public function add_admin_menu() {
-        // Aggiungi menu principale con icona carina
         add_menu_page(
             'Marrison Installer',
-            'MCI',
+            'AM Installer',
             'manage_options',
             'marrison-installer',
             [$this,'admin_page'],
-            plugin_dir_url(__FILE__) . 'icon.svg', // Icona personalizzata
-            30 // Posizione nel menu (dopo Dashboard e Media)
+            plugin_dir_url(__FILE__) . 'icon.svg',
+            30
         );
 
-        // Sottomenu Aggiornamenti (default)
         add_submenu_page(
             'marrison-installer',
             'Installer',
@@ -681,7 +611,6 @@ class Marrison_Custom_Installer {
             [$this, 'admin_page']
         );
 
-        // Sottomenu Impostazioni
         add_submenu_page(
             'marrison-installer',
             'Impostazioni',
@@ -690,134 +619,583 @@ class Marrison_Custom_Installer {
             'marrison-installer-settings',
             [$this, 'settings_page']
         );
-
-
     }
 
     public function settings_page() {
         $settingsUpdated = $_GET['settings-updated'] ?? '';
         ?>
-        <div class="wrap">
-            <h1>Impostazioni Marrison Installer</h1>
+        <div class="wrap marrison-wrap">
+            <div class="marrison-header">
+                <h1>⚙️ Impostazioni Marrison Installer</h1>
+                <p class="marrison-subtitle">Gestisci il tuo repository personalizzato di plugin</p>
+            </div>
 
             <?php if ($settingsUpdated === 'saved'): ?>
-                <div class="notice notice-success is-dismissible"><p>Impostazioni salvate correttamente.</p></div>
+                <div class="notice notice-success is-dismissible"><p><span class="dashicons dashicons-yes-alt"></span> Impostazioni salvate correttamente.</p></div>
             <?php elseif ($settingsUpdated === 'removed'): ?>
-                <div class="notice notice-success is-dismissible"><p>URL del repository ripristinato ai valori predefiniti.</p></div>
+                <div class="notice notice-success is-dismissible"><p><span class="dashicons dashicons-yes-alt"></span> URL del repository ripristinato ai valori predefiniti.</p></div>
             <?php endif; ?>
 
             <?php if (isset($_GET['cache_cleared'])): ?>
-                <div class="notice notice-info"><p>Cache pulita ✓</p></div>
+                <div class="notice notice-info"><p><span class="dashicons dashicons-update"></span> Cache pulita con successo</p></div>
             <?php endif; ?>
 
             <?php if (isset($_GET['mci_checked'])): ?>
-                <div class="notice notice-success is-dismissible"><p>Controllo aggiornamenti MCI forzato con successo.</p></div>
+                <div class="notice notice-success is-dismissible"><p><span class="dashicons dashicons-yes-alt"></span> Controllo aggiornamenti MCI forzato con successo.</p></div>
             <?php endif; ?>
 
-            <h2>Impostazioni Repository</h2>
-            <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
-                <?php wp_nonce_field('marrison_save_repo_url'); ?>
-                <input type="hidden" name="action" value="marrison_save_repo_url">
-                <table class="form-table">
-                    <tr>
-                        <th scope="row"><label for="marrison_repo_url">Indirizzo Repository</label></th>
-                        <td>
-                            <input type="url" id="marrison_repo_url" name="marrison_repo_url" value="<?php echo esc_attr(get_option('marrison_repo_url', $this->repo_url)); ?>" class="regular-text">
-                            <p class="description">Inserisci l'URL del repository personalizzato.</p>
-                        </td>
-                    </tr>
-                </table>
-                <p class="submit">
-                    <button class="button button-primary" type="submit">Salva</button>
-                    <button class="button" type="submit" name="marrison_remove_repo_url" value="1">Rimuovi e ripristina default</button>
-                </p>
-            </form>
+            <div class="marrison-settings-grid">
+                <div class="marrison-settings-card">
+                    <div class="marrison-card-header">
+                        <h2>📦 Repository</h2>
+                        <p>Configura l'URL del tuo repository personalizzato</p>
+                    </div>
+                    <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" class="marrison-form">
+                        <?php wp_nonce_field('marrison_save_repo_url'); ?>
+                        <input type="hidden" name="action" value="marrison_save_repo_url">
+                        
+                        <div class="marrison-form-group">
+                            <label for="marrison_repo_url">Indirizzo Repository</label>
+                            <input type="url" id="marrison_repo_url" name="marrison_repo_url" value="<?php echo esc_attr(get_option('marrison_repo_url', $this->repo_url)); ?>" class="marrison-input" placeholder="https://example.com/wp-repo/">
+                            <small>Inserisci l'URL completo del repository personalizzato</small>
+                        </div>
 
-            <hr>
+                        <div class="marrison-button-group">
+                            <button type="submit" class="button button-primary marrison-btn-primary">💾 Salva Impostazioni</button>
+                            <button type="submit" name="marrison_remove_repo_url" value="1" class="button marrison-btn-secondary">🔄 Ripristina Default</button>
+                        </div>
+                    </form>
+                </div>
 
-            <h2>Strumenti Avanzati</h2>
-            <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
-                <?php wp_nonce_field('marrison_force_check_mci'); ?>
-                <input type="hidden" name="action" value="marrison_force_check_mci">
-                <input type="hidden" name="redirect_to" value="<?php echo esc_url(admin_url('admin.php?page=marrison-installer-settings&mci_checked=1')); ?>">
-                <button class="button button-secondary">Forza controllo aggiornamenti MCI</button>
-                <p class="description">Usa questo pulsante se hai appena rilasciato una nuova versione su GitHub e non viene rilevata.</p>
-            </form>
+                <div class="marrison-settings-card">
+                    <div class="marrison-card-header">
+                        <h2>🛠️ Strumenti Avanzati</h2>
+                        <p>Gestisci cache e aggiornamenti</p>
+                    </div>
+
+                    <div class="marrison-tools">
+                        <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="margin-bottom: 15px;">
+                            <?php wp_nonce_field('marrison_clear_cache'); ?>
+                            <input type="hidden" name="action" value="marrison_clear_cache">
+                            <button type="submit" class="button marrison-btn-tool">
+                                <span class="dashicons dashicons-trash"></span> Pulisci Cache
+                            </button>
+                            <small>Rimuove la cache locale dei plugin disponibili</small>
+                        </form>
+
+                        <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
+                            <?php wp_nonce_field('marrison_force_check_mci'); ?>
+                            <input type="hidden" name="action" value="marrison_force_check_mci">
+                            <button type="submit" class="button marrison-btn-tool">
+                                <span class="dashicons dashicons-update"></span> Forza Controllo Aggiornamenti
+                            </button>
+                            <small>Controlla immediatamente se è disponibile una nuova versione del plugin</small>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="marrison-settings-card marrison-info-card">
+                    <div class="marrison-card-header">
+                        <h2>ℹ️ Informazioni</h2>
+                    </div>
+                    <div class="marrison-info-content">
+                        <p><strong>Versione Plugin:</strong> 1.3</p>
+                        <p><strong>Autore:</strong> Angelo Marra</p>
+                        <p><strong>Sito:</strong> <a href="https://marrisonlab.com" target="_blank">marrisonlab.com</a></p>
+                        <p><strong>Repository:</strong> <a href="https://github.com/marrisonlab/marrison-custom-installer" target="_blank">GitHub</a></p>
+                    </div>
+                </div>
+            </div>
         </div>
+
+        <style>
+            .marrison-wrap {
+                max-width: 1200px;
+            }
+
+            .marrison-header {
+                margin: 20px 0 30px;
+                padding-bottom: 20px;
+                border-bottom: 2px solid #f0f0f1;
+            }
+
+            .marrison-header h1 {
+                font-size: 28px;
+                margin: 0 0 8px 0;
+                color: #1d2327;
+            }
+
+            .marrison-subtitle {
+                margin: 0;
+                color: #646970;
+                font-size: 14px;
+            }
+
+            .marrison-settings-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+                gap: 20px;
+                margin-top: 20px;
+            }
+
+            .marrison-settings-card {
+                background: #fff;
+                border: 1px solid #c3c4c7;
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+                transition: all 0.3s ease;
+            }
+
+            .marrison-settings-card:hover {
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                border-color: #2271b1;
+            }
+
+            .marrison-card-header {
+                padding: 20px;
+                background: linear-gradient(135deg, #f5f7f7 0%, #fcfcfc 100%);
+                border-bottom: 1px solid #e5e5e5;
+            }
+
+            .marrison-card-header h2 {
+                margin: 0 0 8px 0;
+                font-size: 16px;
+                color: #1d2327;
+            }
+
+            .marrison-card-header p {
+                margin: 0;
+                font-size: 13px;
+                color: #646970;
+            }
+
+            .marrison-form {
+                padding: 20px;
+            }
+
+            .marrison-form-group {
+                margin-bottom: 20px;
+            }
+
+            .marrison-form-group label {
+                display: block;
+                margin-bottom: 8px;
+                font-weight: 600;
+                color: #1d2327;
+            }
+
+            .marrison-input {
+                width: 100%;
+                padding: 10px 12px;
+                border: 1px solid #c3c4c7;
+                border-radius: 4px;
+                font-size: 14px;
+                transition: all 0.2s ease;
+                box-sizing: border-box;
+            }
+
+            .marrison-input:focus {
+                outline: none;
+                border-color: #2271b1;
+                box-shadow: 0 0 0 3px rgba(34, 113, 177, 0.1);
+            }
+
+            .marrison-form-group small {
+                display: block;
+                margin-top: 6px;
+                color: #646970;
+                font-size: 12px;
+            }
+
+            .marrison-button-group {
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+
+            .marrison-btn-primary,
+            .marrison-btn-secondary {
+                flex: 1;
+                min-width: 160px;
+                padding: 10px 16px !important;
+                font-size: 14px;
+                font-weight: 600;
+                border-radius: 4px;
+                transition: all 0.2s ease;
+                border: none !important;
+                cursor: pointer;
+            }
+
+            .marrison-btn-primary {
+                background: linear-gradient(135deg, #2271b1 0%, #1963a3 100%);
+                color: white;
+                box-shadow: 0 2px 6px rgba(34, 113, 177, 0.3);
+            }
+
+            .marrison-btn-primary:hover {
+                background: linear-gradient(135deg, #1963a3 0%, #0f4a8f 100%);
+                box-shadow: 0 4px 12px rgba(34, 113, 177, 0.4);
+                transform: translateY(-2px);
+            }
+
+            .marrison-btn-secondary {
+                background: #f0f0f1;
+                color: #1d2327;
+                border: 1px solid #c3c4c7 !important;
+            }
+
+            .marrison-btn-secondary:hover {
+                background: #e5e5e5;
+                border-color: #8c8f94 !important;
+            }
+
+            .marrison-tools {
+                padding: 20px;
+            }
+
+            .marrison-tools form {
+                margin-bottom: 20px;
+                padding-bottom: 20px;
+                border-bottom: 1px solid #f0f0f1;
+            }
+
+            .marrison-tools form:last-child {
+                margin-bottom: 0;
+                padding-bottom: 0;
+                border-bottom: none;
+            }
+
+            .marrison-btn-tool {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                width: 100%;
+                padding: 10px 14px !important;
+                background: #fff;
+                border: 1px solid #c3c4c7 !important;
+                border-radius: 4px;
+                color: #1d2327;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+
+            .marrison-btn-tool:hover {
+                background: #f5f5f5;
+                border-color: #2271b1 !important;
+                color: #2271b1;
+            }
+
+            .marrison-btn-tool .dashicons {
+                font-size: 16px;
+                width: 16px;
+                height: 16px;
+            }
+
+            .marrison-tools small {
+                display: block;
+                margin-top: 6px;
+                color: #646970;
+                font-size: 12px;
+            }
+
+            .marrison-info-card {
+                grid-column: auto;
+            }
+
+            .marrison-info-content {
+                padding: 20px;
+            }
+
+            .marrison-info-content p {
+                margin: 12px 0;
+                font-size: 13px;
+                color: #1d2327;
+            }
+
+            .marrison-info-content a {
+                color: #2271b1;
+                text-decoration: none;
+            }
+
+            .marrison-info-content a:hover {
+                text-decoration: underline;
+            }
+
+            @media (max-width: 782px) {
+                .marrison-settings-grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .marrison-button-group {
+                    flex-direction: column;
+                }
+
+                .marrison-btn-primary,
+                .marrison-btn-secondary {
+                    min-width: auto;
+                }
+            }
+        </style>
         <?php
     }
-
 
     public function admin_page() {
         $installs    = $this->get_available_installs();
         $plugins     = get_plugins();
         $updated     = $_GET['updated'] ?? '';
-
         $bulkUpdated = $_GET['bulk_updated'] ?? [];
         if (!is_array($bulkUpdated)) $bulkUpdated = [$bulkUpdated];
-        $settingsUpdated = $_GET['settings-updated'] ?? '';
 
         ?>
-        <div class="wrap">
-            <h1>Marrison Installer</h1>
+        <div class="wrap marrison-wrap">
+            <div class="marrison-header">
+                <h1>📦 Marrison Installer</h1>
+                <p class="marrison-subtitle">Gestisci l'installazione e l'aggiornamento dei plugin</p>
+            </div>
 
-            <!-- Barra di caricamento -->
-            <div id="marrison-install-progress" class="notice notice-info" style="display:none; padding: 15px; margin: 20px 0;">
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_clear_cache&redirect_to=' . urlencode(admin_url('admin.php?page=marrison-installer&cache_cleared=1'))), 'marrison_clear_cache'); ?>" class="button button-secondary">
+                    <span class="dashicons dashicons-trash" style="vertical-align: middle; margin-right: 5px;"></span> Pulisci Cache
+                </a>
+                <a href="<?php echo admin_url('admin.php?page=marrison-installer-settings'); ?>" class="button button-secondary">
+                    <span class="dashicons dashicons-admin-generic" style="vertical-align: middle; margin-right: 5px;"></span> Impostazioni
+                </a>
+            </div>
+            
+            <style>
+                .marrison-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                    gap: 15px;
+                    margin-top: 20px;
+                }
+
+                .marrison-card {
+                    background: #fff;
+                    border: 1px solid #c3c4c7;
+                    border-radius: 8px;
+                    padding: 0;
+                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                    transition: all 0.3s ease;
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                }
+
+                .marrison-card:hover {
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                    transform: translateY(-2px);
+                    border-color: #2271b1;
+                }
+
+                .marrison-card-header {
+                    padding: 12px 15px;
+                    border-bottom: 1px solid #f0f0f1;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                    background: linear-gradient(to bottom, #fcfcfc, #f5f5f5);
+                }
+
+                .marrison-card-title {
+                    font-size: 14px;
+                    font-weight: 700;
+                    color: #1d2327;
+                    margin: 0;
+                    line-height: 1.3;
+                    flex: 1;
+                }
+
+                .marrison-card-cb {
+                    width: 20px;
+                    height: 20px;
+                    cursor: pointer;
+                    margin-left: 10px;
+                }
+
+                .marrison-card-body {
+                    padding: 12px 15px;
+                    flex: 1;
+                }
+
+                .marrison-card-footer {
+                    padding: 12px 15px;
+                    background: #f6f7f7;
+                    border-top: 1px solid #f0f0f1;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+
+                .marrison-status {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    font-size: 12px;
+                    margin-bottom: 8px;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                }
+
+                .status-installed {
+                    color: #007017;
+                    background: #edfaef;
+                }
+
+                .status-update {
+                    color: #d63638;
+                    background: #fcf0f1;
+                }
+
+                .status-new {
+                    color: #646970;
+                    background: #f0f0f1;
+                }
+
+                .version-info {
+                    font-size: 12px;
+                    color: #50575e;
+                    line-height: 1.6;
+                }
+
+                .version-badge {
+                    background: #f0f0f1;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-family: monospace;
+                    font-size: 11px;
+                }
+
+                .marrison-actions-bar {
+                    background: #fff;
+                    padding: 12px 15px;
+                    border: 1px solid #c3c4c7;
+                    border-left: 4px solid #2271b1;
+                    margin: 20px 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 15px;
+                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                    border-radius: 4px;
+                    flex-wrap: wrap;
+                }
+
+                .marrison-actions-bar label {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    font-weight: 600;
+                    cursor: pointer;
+                }
+
+                #marrison-install-progress {
+                    background: linear-gradient(to right, #f0f7ff, #fff);
+                    border-left: 4px solid #2271b1 !important;
+                    margin: 20px 0 !important;
+                    padding: 15px 15px !important;
+                }
+
+                .marrison-install-btn {
+                    padding: 6px 12px !important;
+                    font-size: 12px;
+                    border-radius: 4px;
+                    font-weight: 600;
+                    transition: all 0.2s ease;
+                    border: none !important;
+                    white-space: nowrap;
+                }
+
+                .marrison-install-btn.button-primary {
+                    background: linear-gradient(135deg, #2271b1 0%, #1963a3 100%);
+                    color: white;
+                    box-shadow: 0 2px 4px rgba(34, 113, 177, 0.2);
+                }
+
+                .marrison-install-btn.button-primary:hover {
+                    background: linear-gradient(135deg, #1963a3 0%, #0f4a8f 100%);
+                    box-shadow: 0 4px 8px rgba(34, 113, 177, 0.3);
+                }
+
+                .marrison-install-btn.button-secondary {
+                    background: #f0f0f1;
+                    color: #1d2327;
+                }
+
+                .marrison-install-btn.button-secondary:hover {
+                    background: #e5e5e5;
+                }
+
+                .marrison-install-btn:disabled {
+                    opacity: 0.6;
+                    cursor: not-allowed;
+                }
+
+                @media (max-width: 782px) {
+                    .marrison-grid {
+                        grid-template-columns: 1fr;
+                    }
+
+                    .marrison-actions-bar {
+                        flex-direction: column;
+                        align-items: stretch;
+                    }
+
+                    .marrison-actions-bar > button {
+                        width: 100%;
+                    }
+                }
+            </style>
+
+            <?php if ($bulkUpdated): ?>
+                <div class="notice notice-success"><p><span class="dashicons dashicons-yes-alt"></span> Installazione massiva completata ✓</p></div>
+            <?php endif; ?>
+
+            <?php if (isset($_GET['cache_cleared'])): ?>
+                <div class="notice notice-info"><p><span class="dashicons dashicons-update"></span> Cache pulita ✓</p></div>
+            <?php endif; ?>
+
+            <div id="marrison-install-progress" class="notice notice-info" style="display:none; padding: 15px;">
                 <div style="display: flex; align-items: center; gap: 15px;">
-                    <div class="spinner is-active" style="float:none; width:20px; height:20px; margin:0;"></div>
+                    <div class="spinner is-active" style="float:none; width:24px; height:24px; margin:0;"></div>
                     <div style="flex: 1;">
                         <div id="marrison-install-status" style="font-weight: 600; margin-bottom: 8px;">Operazione in corso...</div>
-                        <div style="background: #f0f0f1; border-radius: 4px; height: 8px; overflow: hidden;">
-                            <div id="marrison-install-bar" style="background: #2271b1; height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+                        <div style="background: #e5e5e5; border-radius: 4px; height: 8px; overflow: hidden;">
+                            <div id="marrison-install-bar" style="background: linear-gradient(90deg, #2271b1, #0f4a8f); height: 100%; width: 0%; transition: width 0.3s ease; border-radius: 4px;"></div>
                         </div>
-                        <div id="marrison-install-info" style="font-size: 12px; color: #646970; margin-top: 4px;"></div>
+                        <div id="marrison-install-info" style="font-size: 12px; color: #646970; margin-top: 6px;"></div>
                     </div>
                 </div>
             </div>
-
-            <?php if ($settingsUpdated === 'saved'): ?>
-                <div class="notice notice-success is-dismissible"><p>Impostazioni salvate correttamente.</p></div>
-            <?php elseif ($settingsUpdated === 'removed'): ?>
-                <div class="notice notice-success is-dismissible"><p>URL del repository ripristinato ai valori predefiniti.</p></div>
-            <?php endif; ?>
-
-            <?php if ($bulkUpdated): ?>
-                <div class="notice notice-success"><p>Installazione massiva completata ✓</p></div>
-            <?php endif; ?>
-
-
-
-            <?php if (isset($_GET['cache_cleared'])): ?>
-                <div class="notice notice-info"><p>Cache pulita ✓</p></div>
-            <?php endif; ?>
 
             <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
                 <?php wp_nonce_field('marrison_bulk_install'); ?>
                 <input type="hidden" name="action" value="marrison_bulk_install">
 
-                <h2 style="margin-top: 30px;">Repository Plugin</h2>
-                <table class="wp-list-table widefat striped">
-                    <thead>
-                        <tr>
-                            <td id="cb" class="manage-column column-cb check-column"><label class="screen-reader-text" for="cb-select-all-1">Seleziona tutto</label><input id="cb-select-all-1" type="checkbox"></td>
-                            <th>Plugin</th>
-                            <th>Stato</th>
-                            <th>Versione Repo</th>
-                            <th>Azione</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                <div class="marrison-actions-bar">
+                    <div>
+                        <label>
+                            <input type="checkbox" id="cb-select-all-main">
+                            <strong>Seleziona tutti</strong>
+                        </label>
+                    </div>
+                    <button type="submit" class="button button-primary">📥 Installa/Aggiorna Selezionati</button>
+                </div>
 
-                    <?php 
-                    if (empty($installs)): ?>
-                        <tr><td colspan="5">Nessun plugin trovato nel repository. Verifica l'URL nelle impostazioni.</td></tr>
-                    <?php else:
+                <?php if (empty($installs)): ?>
+                    <div class="notice notice-warning inline">
+                        <p>⚠️ Nessun plugin trovato nel repository. Verifica l'URL nelle <a href="<?php echo admin_url('admin.php?page=marrison-installer-settings'); ?>">impostazioni</a>.</p>
+                    </div>
+                <?php else: ?>
+                    <div class="marrison-grid">
+                    <?php
                         foreach ($installs as $u):
                             $slug = $u['slug'];
                             $name = $u['name'];
                             $repo_version = $u['version'];
                             
-                            // Cerca se installato
                             $is_installed = false;
                             $current_version = '';
                             $plugin_file = $this->find_plugin_file($slug);
@@ -825,82 +1203,63 @@ class Marrison_Custom_Installer {
                             if ($plugin_file && isset($plugins[$plugin_file])) {
                                 $is_installed = true;
                                 $current_version = $plugins[$plugin_file]['Version'];
-                                $name = $plugins[$plugin_file]['Name']; // Usa nome locale se disponibile
+                                $name = $plugins[$plugin_file]['Name'];
                             }
                             
-                            // Determina stato
-                            $status_label = '';
-                            $row_class = '';
+                            $status_html = '';
                             $can_update = false;
                             
                             if (!$is_installed) {
-                                $status_label = '<span class="dashicons dashicons-plus" style="color: #646970;"></span> Non installato';
+                                $status_html = '<span class="status-new">⊕ Nuovo</span>';
                             } elseif (version_compare($current_version, $repo_version, '<')) {
-                                $status_label = '<strong style="color: #d63638;">Aggiornamento disponibile</strong> (' . $current_version . ' → ' . $repo_version . ')';
+                                $status_html = '<span class="status-update">⟳ Aggiornamento</span>';
                                 $can_update = true;
                             } else {
-                                $status_label = '<span class="dashicons dashicons-yes" style="color: green;"></span> Installato (v' . $current_version . ')';
+                                $status_html = '<span class="status-installed">✓ Installato</span>';
                             }
                     ?>
-                        <tr>
-                            <td><input type="checkbox" name="plugins[]" value="<?php echo esc_attr($slug); ?>"></td>
-                            <td>
-                                <strong><?php echo esc_html($name); ?></strong>
-                                <br><small><?php echo esc_html($slug); ?></small>
-                            </td>
-                            <td><?php echo $status_label; ?></td>
-                            <td><?php echo esc_html($repo_version); ?></td>
-                            <td>
-                                <?php if ($updated === $slug || in_array($slug, $bulkUpdated, true)): ?>
-                                    <strong style="color:green;">✓ Completato</strong>
-                                <?php else: ?>
-                                    <?php 
-                                    $is_self_update = ($slug === 'marrison-custom-installer');
-                                    $nonce = $is_self_update ? wp_create_nonce('marrison_install_marrison-custom-installer') : wp_create_nonce('marrison_install_' . $slug);
-                                    
-                                    $btn_label = $is_installed ? ($can_update ? 'Aggiorna' : 'Reinstalla') : 'Installa';
-                                    $btn_class = $can_update ? 'button-primary' : 'button-secondary';
-                                    ?>
-                                    <button class="button <?php echo $btn_class; ?> marrison-install-btn" 
-                                            data-slug="<?php echo esc_attr($slug); ?>"
-                                            data-nonce="<?php echo esc_attr($nonce); ?>">
-                                        <?php echo esc_html($btn_label); ?>
-                                    </button>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    <?php
-                        endforeach; 
-                    endif; ?>
-
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td class="manage-column column-cb check-column"><label class="screen-reader-text" for="cb-select-all-2">Seleziona tutto</label><input id="cb-select-all-2" type="checkbox"></td>
-                            <th>Plugin</th>
-                            <th>Stato</th>
-                            <th>Versione Repo</th>
-                            <th>Azione</th>
-                        </tr>
-                    </tfoot>
-                </table>
-
-                <p>
-                    <button class="button button-primary">Installa/Aggiorna selezionati</button>
-                </p>
+                        <div class="marrison-card">
+                            <div class="marrison-card-header">
+                                <h3 class="marrison-card-title"><?php echo esc_html($name); ?></h3>
+                                <input type="checkbox" name="plugins[]" value="<?php echo esc_attr($slug); ?>" class="marrison-card-cb">
+                            </div>
+                            <div class="marrison-card-body">
+                                <div><?php echo $status_html; ?></div>
+                                <div class="version-info">
+                                    <?php if ($is_installed): ?>
+                                        <strong>Attuale:</strong> <span class="version-badge"><?php echo esc_html($current_version); ?></span><br>
+                                    <?php endif; ?>
+                                    <strong>Repository:</strong> <span class="version-badge"><?php echo esc_html($repo_version); ?></span>
+                                </div>
+                            </div>
+                            <div class="marrison-card-footer">
+                                <div></div>
+                                <div>
+                                    <?php if ($updated === $slug || in_array($slug, $bulkUpdated, true)): ?>
+                                        <strong style="color:#007017;">✓ Fatto</strong>
+                                    <?php else: ?>
+                                        <?php 
+                                        $is_self_update = ($slug === 'marrison-custom-installer');
+                                        $nonce = $is_self_update ? wp_create_nonce('marrison_install_marrison-custom-installer') : wp_create_nonce('marrison_install_' . $slug);
+                                        
+                                        $btn_label = $is_installed ? ($can_update ? 'Aggiorna' : 'Reinstalla') : 'Installa';
+                                        $btn_class = $can_update || !$is_installed ? 'button-primary' : 'button-secondary';
+                                        ?>
+                                        <button type="button" class="button <?php echo $btn_class; ?> marrison-install-btn" 
+                                                data-slug="<?php echo esc_attr($slug); ?>"
+                                                data-nonce="<?php echo esc_attr($nonce); ?>">
+                                            <?php echo esc_html($btn_label); ?>
+                                        </button>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
             </form>
-
-            <hr style="margin-top: 30px;">
-            
-            <h2 style="margin-top: 30px;">Strumenti</h2>
-            <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
-                <?php wp_nonce_field('marrison_clear_cache'); ?>
-                <input type="hidden" name="action" value="marrison_clear_cache">
-                <input type="hidden" name="redirect_to" value="<?php echo esc_url(admin_url('admin.php?page=marrison-installer&cache_cleared=1')); ?>">
-                <button class="button">Pulisci cache</button>
-            </form>
-
         </div>
+
         <script>
             jQuery(document).ready(function($) {
                 
@@ -920,10 +1279,9 @@ class Marrison_Custom_Installer {
                 function hideProgressBar() {
                     setTimeout(function() {
                         $('#marrison-install-progress').fadeOut();
-                    }, 2000);
+                    }, 1500);
                 }
 
-                // Gestione click sui pulsanti di installazione/aggiornamento singoli
                 $('.marrison-install-btn').on('click', function(e) {
                     e.preventDefault();
                     
@@ -936,13 +1294,9 @@ class Marrison_Custom_Installer {
                         return;
                     }
                     
-                    // Disabilita il pulsante
                     $btn.prop('disabled', true).text('In corso...');
-                    
-                    // Mostra la barra di caricamento
                     showProgressBar();
                     
-                    // Simula progresso
                     var progress = 0;
                     var progressInterval = setInterval(function() {
                         progress += Math.random() * 15;
@@ -957,7 +1311,6 @@ class Marrison_Custom_Installer {
                         }
                     }, 300);
                     
-                    // Esegui l'aggiornamento via AJAX
                     $.ajax({
                         url: marrisonInstaller.ajaxurl,
                         type: 'POST',
@@ -971,9 +1324,8 @@ class Marrison_Custom_Installer {
                             
                             if (response.success) {
                                 updateProgressBar(100, 'Completato!', 'Operazione riuscita');
-                                $btn.replaceWith('<strong style="color:green;">✓ Completato</strong>');
+                                $btn.replaceWith('<strong style="color:#007017;">✓ Completato</strong>');
                                 
-                                // Ricarica la pagina dopo 1.5 secondi
                                 setTimeout(function() {
                                     location.reload();
                                 }, 1500);
@@ -993,102 +1345,9 @@ class Marrison_Custom_Installer {
                     });
                 });
                 
-                // Gestione installazione multipla via AJAX
-                $('form input[name="action"][value="marrison_bulk_install"]').closest('form').on('submit', function(e) {
-                    e.preventDefault();
-                    
-                    var $checked = $('input[name="plugins[]"]:checked');
-                    if ($checked.length === 0) {
-                        alert('Seleziona almeno un plugin');
-                        return;
-                    }
-                    
-                    var plugins = [];
-                    $checked.each(function() {
-                        plugins.push($(this).val());
-                    });
-                    
-                    // Mostra la barra di caricamento
-                    showProgressBar();
-                    updateProgressBar(0, 'Preparazione...', 'Plugin selezionati: ' + plugins.length);
-                    
-                    var bulkNonce = '<?php echo wp_create_nonce("marrison_bulk_install"); ?>';
-                    
-                    // Aggiorna i plugin uno per uno
-                    var currentIndex = 0;
-                    var successCount = 0;
-                    
-                    function updateNextPlugin() {
-                        if (currentIndex >= plugins.length) {
-                            // Tutti gli aggiornamenti completati
-                            if (successCount > 0) {
-                                updateProgressBar(100, 'Completato!', 'Operazione riuscita su ' + successCount + ' plugin');
-                                setTimeout(function() {
-                                    location.reload();
-                                }, 1500);
-                            } else {
-                                updateProgressBar(0, 'Errore', 'Nessuna operazione riuscita');
-                                hideProgressBar();
-                            }
-                            return;
-                        }
-                        
-                        var slug = plugins[currentIndex];
-                        var progressPercent = Math.round((currentIndex / plugins.length) * 100);
-                        
-                        // Aggiorna lo stato della barra
-                        updateProgressBar(progressPercent, 'Elaborazione in corso...', 'Plugin ' + (currentIndex + 1) + ' di ' + plugins.length + ': ' + slug);
-                        
-                        // Esegui via AJAX
-                        $.ajax({
-                            url: marrisonInstaller.ajaxurl,
-                            type: 'POST',
-                            data: {
-                                action: 'marrison_install_plugin_ajax',
-                                slug: slug,
-                                nonce: bulkNonce
-                            },
-                            success: function(response) {
-                                if (response.success) {
-                                    successCount++;
-                                }
-                                currentIndex++;
-                                updateNextPlugin();
-                            },
-                            error: function(error) {
-                                currentIndex++;
-                                updateNextPlugin();
-                            }
-                        });
-                    }
-                    
-                    // Avvia
-                    updateNextPlugin();
+                $('#cb-select-all-main').on('change', function() {
+                    $('.marrison-card-cb').prop('checked', $(this).prop('checked'));
                 });
-                
-                // Gestione checkbox "Seleziona tutto"
-                const selectAll1 = document.getElementById('cb-select-all-1');
-                const selectAll2 = document.getElementById('cb-select-all-2');
-                const checkboxes = document.querySelectorAll('input[name="plugins[]"]');
-
-                function toggleCheckboxes(source) {
-                    checkboxes.forEach(function(checkbox) {
-                        checkbox.checked = source.checked;
-                    });
-                    if(source === selectAll1 && selectAll2) selectAll2.checked = source.checked;
-                    if(source === selectAll2 && selectAll1) selectAll1.checked = source.checked;
-                }
-
-                if (selectAll1) {
-                    selectAll1.addEventListener('change', function() {
-                        toggleCheckboxes(this);
-                    });
-                }
-                if (selectAll2) {
-                    selectAll2.addEventListener('change', function() {
-                        toggleCheckboxes(this);
-                    });
-                }
             });
         </script>
         <?php
@@ -1097,34 +1356,23 @@ class Marrison_Custom_Installer {
 
 new Marrison_Custom_Installer;
 
-/**
- * Fix definitivo GitHub installer:
- * - rinomina la cartella del plugin con suffisso versione (es. -1.9)
- * - forza il refresh della cache plugin per mostrare la versione corretta in WP
- */
-add_action( 'upgrader_process_complete', function ( $upgrader, $hook_extra ) {
-
-    // Agisce solo sui plugin
-    if ( empty( $hook_extra['type'] ) || $hook_extra['type'] !== 'plugin' ) {
+add_action('upgrader_process_complete', function($upgrader, $hook_extra) {
+    if (empty($hook_extra['type']) || $hook_extra['type'] !== 'plugin') {
         return;
     }
 
     $plugins_dir = WP_PLUGIN_DIR;
     $expected    = $plugins_dir . '/marrison-custom-installer';
 
-    // Cerca directory tipo: marrison-custom-installer-*
-    foreach ( glob( $plugins_dir . '/marrison-custom-installer-*', GLOB_ONLYDIR ) as $dir ) {
-
-        // Se la directory corretta esiste già, salta
-        if ( is_dir( $expected ) ) {
+    foreach (glob($plugins_dir . '/marrison-custom-installer-*', GLOB_ONLYDIR) as $dir) {
+        if (is_dir($expected)) {
             continue;
         }
 
-        // Rinomina e pulisce la cache plugin
-        if ( rename( $dir, $expected ) ) {
-            wp_clean_plugins_cache( true );
+        if (rename($dir, $expected)) {
+            wp_clean_plugins_cache(true);
         }
 
         break;
     }
-}, 10, 2 );
+}, 10, 2);
