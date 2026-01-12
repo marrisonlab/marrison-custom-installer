@@ -23,6 +23,9 @@ GitHub Repository: https://github.com/marrisonlab/marrison-custom-installer
 
 == Changelog ==
 
+= 1.8 =
+* Fix: Risolto conflitto cache chiavi con Marrison Custom Updater.
+
 = 1.7 =
 * Layout: Grid view changed to 3 columns on desktop.
 * Core: Removed default repository URL (requires manual setup).

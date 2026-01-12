@@ -3,7 +3,7 @@
  * Plugin Name: Marrison Custom Installer
  * Plugin URI:  https://github.com/marrisonlab/marrison-custom-installer
  * Description: This plugin is used to install plugins from a personal repository.
- * Version: 1.7
+ * Version: 1.8
  * Author: Angelo Marra
  * Author URI:  https://marrisonlab.com
  */
@@ -40,7 +40,7 @@ class Marrison_Custom_Installer {
     }
 
     public function force_clear_github_cache() {
-        delete_transient('marrison_github_version');
+        delete_transient('marrison_installer_github_version');
     }
 
     public function auto_update_specific_plugins($update, $item) {
@@ -213,7 +213,7 @@ class Marrison_Custom_Installer {
             'new_version' => $remote,
             'url'         => 'https://github.com/marrisonlab/marrison-custom-installer',
             'package'     => 'https://github.com/marrisonlab/marrison-custom-installer/archive/refs/tags/v' . $remote . '.zip',
-            'tested'      => '6.6',
+            'tested'      => '6.9',
             'requires_php' => '7.4',
             'icons'       => [],
             'banners'     => [],
@@ -231,7 +231,7 @@ class Marrison_Custom_Installer {
     }
 
     private function get_github_version() {
-        $cached = get_transient('marrison_github_version');
+        $cached = get_transient('marrison_installer_github_version');
         if ($cached !== false) return $cached;
 
         $response = wp_remote_get('https://api.github.com/repos/marrisonlab/marrison-custom-installer/releases/latest', [
@@ -248,7 +248,7 @@ class Marrison_Custom_Installer {
         if (empty($body['tag_name'])) return false;
 
         $version = str_replace('v', '', $body['tag_name']);
-        set_transient('marrison_github_version', $version, 6 * HOUR_IN_SECONDS);
+        set_transient('marrison_installer_github_version', $version, 6 * HOUR_IN_SECONDS);
 
         return $version;
     }
@@ -283,15 +283,22 @@ class Marrison_Custom_Installer {
         $info = new stdClass();
         
         if (preg_match('/== Description ==\s*(.*?)\s*== /s', $readme, $match)) {
-            $info->description = trim($match[1]);
+            $info->description = $this->parsedown(trim($match[1]));
         } else {
             $info->description = '';
         }
 
         if (preg_match('/== Changelog ==\s*(.*?)$/s', $readme, $match)) {
-            $info->changelog = trim($match[1]);
+            $info->changelog = $this->parsedown(trim($match[1]));
         } else {
             $info->changelog = '';
+        }
+
+        // Parse Tested up to
+        if (preg_match('/Tested up to:\s*([0-9\.]+)/i', $readme, $match)) {
+            $tested_wp = trim($match[1]);
+        } else {
+            $tested_wp = '6.4';
         }
 
         $github_version = $this->get_github_version();
@@ -304,7 +311,7 @@ class Marrison_Custom_Installer {
         $info->download_url = $info->version ? 'https://github.com/marrisonlab/marrison-custom-installer/archive/refs/tags/v' . $info->version . '.zip' : '';
         $info->requires_php = '7.4';
         $info->requires = '5.0';
-        $info->tested = '6.4';
+        $info->tested = $tested_wp;
         $info->last_updated = current_time('mysql');
         $info->homepage = 'https://github.com/marrisonlab/marrison-custom-installer';
         $info->active_installs = 0;
@@ -319,6 +326,25 @@ class Marrison_Custom_Installer {
         $info->banners = array();
 
         return $info;
+    }
+
+    private function parsedown($text) {
+        // Convert headers = Version = to <h4>
+        $text = preg_replace('/^= (.*?) =/m', '<h4>$1</h4>', $text);
+        
+        // Convert * items to list items
+        $text = preg_replace('/^\* (.*?)$/m', '<li>$1</li>', $text);
+        
+        // Wrap adjacent <li> in <ul>
+        $text = preg_replace('/(<li>.*<\/li>)/s', '<ul>$1</ul>', $text);
+        
+        // Fix multiple <ul> wrapping (simple cleanup)
+        $text = str_replace('</ul><ul>', '', $text);
+        
+        // Convert double newlines to paragraphs for other text
+        $text = wpautop($text);
+        
+        return $text;
     }
 
     public function add_marrison_action_links($actions, $plugin_file) {
@@ -460,7 +486,7 @@ class Marrison_Custom_Installer {
     public function force_check_mci() {
         check_admin_referer('marrison_force_check_mci');
         
-        delete_transient('marrison_github_version');
+        delete_transient('marrison_installer_github_version');
         delete_site_transient('update_plugins');
         wp_clean_plugins_cache(true);
         wp_update_plugins();
