@@ -23,6 +23,12 @@ GitHub Repository: https://github.com/marrisonlab/marrison-custom-installer
 
 == Changelog ==
 
+= 1.9 =
+* UI: Unificazione grafica con Marrison Custom Updater (stile moderno, card compatte).
+* Feature: Aggiunta tab "Guida & Download" nelle impostazioni con download diretto del file index.php.
+* Fix: Ripristinata barra di progresso per installazioni e aggiornamenti.
+* Dev: Migrazione stili inline a file CSS dedicato (assets/css/admin-style.css).
+
 = 1.8 =
 * Fix: Risolto conflitto cache chiavi con Marrison Custom Updater.
 

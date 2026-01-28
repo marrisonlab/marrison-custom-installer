@@ -3,7 +3,7 @@
  * Plugin Name: Marrison Custom Installer
  * Plugin URI:  https://github.com/marrisonlab/marrison-custom-installer
  * Description: This plugin is used to install plugins from a personal repository.
- * Version: 1.8
+ * Version: 1.9
  * Author: Angelo Marra
  * Author URI:  https://marrisonlab.com
  */
@@ -635,7 +635,7 @@ class Marrison_Custom_Installer {
         
         wp_enqueue_script('jquery');
         wp_enqueue_style('dashicons');
-        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '1.8');
+        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '1.9');
         
         wp_add_inline_script('jquery', '
             jQuery(document).ready(function($) {
@@ -854,7 +854,7 @@ class Marrison_Custom_Installer {
                         <h2 class="mci-card-title">ℹ️ Informazioni</h2>
                     </div>
                     <div style="padding: 20px;">
-                        <p><strong>Versione Plugin:</strong> 1.8</p>
+                        <p><strong>Versione Plugin:</strong> 1.9</p>
                         <p><strong>Autore:</strong> Angelo Marra</p>
                         <p><strong>Sito:</strong> <a href="https://marrisonlab.com" target="_blank">marrisonlab.com</a></p>
                         <p><strong>Repository:</strong> <a href="https://github.com/marrisonlab/marrison-custom-installer" target="_blank">GitHub</a></p>
