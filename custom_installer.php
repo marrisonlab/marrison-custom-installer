@@ -3,7 +3,7 @@
  * Plugin Name: Marrison Custom Installer
  * Plugin URI:  https://github.com/marrisonlab/marrison-custom-installer
  * Description: This plugin is used to install plugins from a personal repository.
- * Version: 2.0
+ * Version: 2.1.0
  * Author: Angelo Marra
  * Author URI:  https://marrisonlab.com
  */
@@ -12,12 +12,13 @@ require_once __DIR__ . '/includes/traits/UpdateOperationsTrait.php';
 
 class Marrison_Custom_Installer {
 
-    use Marrison_Update_Operations_Trait {
+    use Marrison_Installer_Update_Operations_Trait {
         check_for_updates as trait_check_for_updates;
         plugin_info as trait_plugin_info;
     }
 
     private $repo_url = '';
+    protected $updates_url = ''; // Required by trait fallback
     private $cache_duration = 6 * HOUR_IN_SECONDS;
 
     public function __construct() {
@@ -541,7 +542,7 @@ class Marrison_Custom_Installer {
         
         wp_enqueue_script('jquery');
         wp_enqueue_style('dashicons');
-        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.0');
+        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.0.3');
         
         wp_add_inline_script('jquery', '
             jQuery(document).ready(function($) {
@@ -774,6 +775,10 @@ class Marrison_Custom_Installer {
             <div class="mci-header">
                 <h1><span class="dashicons dashicons-download"></span> Marrison Installer</h1>
                 <div class="mci-header-actions">
+                    <form id="marrison-bulk-form" method="post" style="display:inline;">
+                        <?php wp_nonce_field('marrison_bulk_install'); ?>
+                        <button type="submit" class="button button-primary">Aggiorna Selezionati</button>
+                    </form>
                     <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="display:inline;">
                         <input type="hidden" name="action" value="marrison_force_check_mci">
                         <?php wp_nonce_field('marrison_force_check_mci'); ?>
@@ -809,14 +814,7 @@ class Marrison_Custom_Installer {
                 </div>
             <?php endif; ?>
 
-            <form id="marrison-bulk-form" method="post">
-                <?php wp_nonce_field('marrison_bulk_install'); ?>
-                
-                <div class="mci-bulk-actions">
-                    <button type="submit" class="button button-primary">Aggiorna Selezionati</button>
-                </div>
-
-                <div class="mci-dashboard-grid">
+            <div class="mci-dashboard-grid">
                     <?php if (empty($installs)): ?>
                         <div class="mci-card mci-empty-state">
                             <span class="dashicons dashicons-info"></span>
@@ -855,24 +853,24 @@ class Marrison_Custom_Installer {
                                 }
                             }
                         ?>
-                        <div class="mci-card plugin-card <?php echo $needs_update ? 'has-update' : ''; ?>">
-                            <div class="plugin-header">
-                                <div class="plugin-icon">
+                        <div class="mci-card mci-plugin-card <?php echo $needs_update ? 'has-update' : ''; ?>">
+                            <div class="mci-plugin-header">
+                                <div class="mci-plugin-icon">
                                     <?php if (!empty($plugin['icons']['1x'])): ?>
                                         <img src="<?php echo esc_url($plugin['icons']['1x']); ?>" alt="">
                                     <?php else: ?>
                                         <span class="dashicons dashicons-admin-plugins"></span>
                                     <?php endif; ?>
                                 </div>
-                                <div class="plugin-title">
+                                <div class="mci-plugin-title">
                                     <h3><?php echo esc_html($plugin['name']); ?></h3>
-                                    <span class="version-badge <?php echo $needs_update ? 'update-available' : ''; ?>">
+                                    <span class="mci-version-badge <?php echo $needs_update ? 'update-available' : ''; ?>">
                                         v<?php echo esc_html($plugin['version']); ?>
                                     </span>
                                 </div>
                             </div>
                             
-                            <div class="plugin-meta">
+                            <div class="mci-plugin-meta">
                                 <?php if ($is_installed): ?>
                                     <div class="meta-item">
                                         <span class="label">Installato:</span>
@@ -885,28 +883,20 @@ class Marrison_Custom_Installer {
                                 </div>
                             </div>
 
-                            <div class="plugin-actions">
+                            <div class="mci-plugin-actions">
+                                <label class="mci-checkbox-wrapper">
+                                    <input type="checkbox" name="plugins[]" value="<?php echo esc_attr($slug); ?>" <?php if ($needs_update) echo 'checked'; ?>>
+                                    <span class="checkmark"></span>
+                                </label>
                                 <?php if ($needs_update): ?>
-                                    <label class="mci-checkbox-wrapper">
-                                        <input type="checkbox" name="plugins[]" value="<?php echo esc_attr($slug); ?>">
-                                        <span class="checkmark"></span>
-                                    </label>
                                     <a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_install_plugin&slug=' . $slug), 'marrison_install_' . $slug); ?>" class="mci-button mci-button-primary">
                                         Aggiorna
                                     </a>
                                 <?php elseif ($is_installed): ?>
-                                    <label class="mci-checkbox-wrapper">
-                                        <input type="checkbox" name="plugins[]" value="<?php echo esc_attr($slug); ?>">
-                                        <span class="checkmark"></span>
-                                    </label>
                                     <a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_install_plugin&slug=' . $slug), 'marrison_install_' . $slug); ?>" class="mci-button mci-button-secondary">
                                         Reinstalla
                                     </a>
                                 <?php else: ?>
-                                    <label class="mci-checkbox-wrapper">
-                                        <input type="checkbox" name="plugins[]" value="<?php echo esc_attr($slug); ?>">
-                                        <span class="checkmark"></span>
-                                    </label>
                                     <a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_install_plugin&slug=' . $slug), 'marrison_install_' . $slug); ?>" class="mci-button mci-button-primary">
                                         Installa
                                     </a>
@@ -916,7 +906,6 @@ class Marrison_Custom_Installer {
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </div>
-            </form>
         </div>
         <?php
     }

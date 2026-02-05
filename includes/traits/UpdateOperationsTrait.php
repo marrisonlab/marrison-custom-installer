@@ -1,5 +1,5 @@
 <?php
-trait Marrison_Update_Operations_Trait {
+trait Marrison_Installer_Update_Operations_Trait {
     private function get_available_updates() {
         $custom_repo_url = get_option('marrison_repo_url');
         $repo_url = !empty($custom_repo_url) ? trailingslashit($custom_repo_url) : $this->updates_url;
