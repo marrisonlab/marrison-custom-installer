@@ -2,9 +2,9 @@
 Contributors: Angelo Marra
 Tags: installer, plugin-manager, custom-repository
 Requires at least: 6.0
-Tested up to: 6.9
+Tested up to: 6.9.1
 Requires PHP: 7.4
-Stable tag: 2.1.0
+Stable tag: 2.1.5
 License: GPL-3.0+
 License URI: https://www.gnu.org/licenses/gpl-3.0.txt
 
@@ -22,6 +22,16 @@ GitHub Repository: https://github.com/marrisonlab/marrison-custom-installer
 3. Upload the plugin to WordPress and activate it.
 
 == Changelog ==
+
+= 2.1.5 =
+* Fix: Migliorata la compatibilità con Marrison Custom Updater evitando conflitti di classi in attivazione.
+
+= 2.1.0 =
+* Fix: Risolto il bug della cartella versionata di GitHub che causava il rilevamento di plugin duplicati.
+* Fix: Risolto un errore fatale che impediva l'attivazione del plugin in presenza di Marrison Custom Updater.
+* Fix: Corretto il layout della pagina principale che appariva sformattato a causa di conflitti CSS.
+* Miglioramento: Riorganizzata l'interfaccia utente per un layout più compatto e funzionale.
+* Miglioramento: Aggiunta la pre-selezione automatica dei plugin che necessitano di un aggiornamento.
 
 = 2.0 =
 * Core: Implementazione di UpdateOperationsTrait per una gestione robusta degli aggiornamenti (condiviso con Marrison Custom Updater).
