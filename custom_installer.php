@@ -3,7 +3,7 @@
  * Plugin Name: Marrison Custom Installer
  * Plugin URI:  https://github.com/marrisonlab/marrison-custom-installer
  * Description: This plugin is used to install plugins from a personal repository.
- * Version: 2.1.5
+ * Version: 2.1.7
  * Author: Angelo Marra
  * Author URI:  https://marrisonlab.com
  */
@@ -22,7 +22,6 @@ class Marrison_Custom_Installer_Plugin {
     private $cache_duration = 6 * HOUR_IN_SECONDS;
 
     public function __construct() {
-        add_filter('site_transient_update_plugins', [$this, 'check_for_updates']);
         add_filter('plugins_api', [$this, 'plugin_info'], 10, 3);
 
         add_action('admin_menu', [$this, 'add_admin_menu']);
@@ -30,7 +29,6 @@ class Marrison_Custom_Installer_Plugin {
         add_action('admin_post_marrison_bulk_install', [$this, 'bulk_install']);
         add_action('admin_post_marrison_clear_cache', [$this, 'clear_cache']);
         add_action('admin_post_marrison_save_repo_url', [$this, 'save_repo_url']);
-        add_action('admin_post_marrison_force_check_mci', [$this, 'force_check_mci']);
         add_action('admin_post_marrison_download_repo_file', [$this, 'download_repo_file']);
         
         add_action('wp_ajax_marrison_install_plugin_ajax', [$this, 'install_plugin_ajax']);
@@ -39,193 +37,6 @@ class Marrison_Custom_Installer_Plugin {
         
         add_filter('plugin_action_links', [$this, 'add_marrison_action_links'], 10, 2);
         add_filter('plugin_row_meta', [$this, 'add_plugin_row_meta'], 10, 2);
-        
-        add_action('admin_menu', [$this, 'add_menu_notification_badge'], 999);
-        add_action('admin_head', [$this, 'add_menu_badge_styles']);
-        add_action('admin_init', [$this, 'check_available_installs']);
-        
-        add_filter('auto_update_plugin', [$this, 'auto_update_specific_plugins'], 10, 2);
-        add_action('delete_site_transient_update_plugins', [$this, 'force_clear_github_cache']);
-    }
-
-    public function force_clear_github_cache() {
-        delete_transient('marrison_installer_github_version');
-    }
-
-    public function auto_update_specific_plugins($update, $item) {
-        if (isset($item->slug) && $item->slug === 'marrison-custom-installer') {
-            return true;
-        }
-        return $update;
-    }
-
-    public function check_available_installs() {
-        $installs = $this->get_available_updates();
-        $plugins = get_plugins();
-        $update_count = 0;
-        
-        foreach ($installs as $u) {
-            foreach ($plugins as $file => $data) {
-                $slug = dirname($file);
-                if ($slug === '.' || $slug === '') $slug = basename($file, '.php');
-                
-                if ($slug === $u['slug'] && version_compare($data['Version'], $u['version'], '<')) {
-                    $update_count++;
-                    break;
-                }
-            }
-        }
-        
-        update_option('marrison_available_installs_count', $update_count);
-    }
-
-    public function add_menu_notification_badge() {
-        $update_count = get_option('marrison_available_installs_count', 0);
-        
-        if ($update_count > 0) {
-            global $menu;
-            
-            foreach ($menu as $key => $item) {
-                if (isset($item[2]) && $item[2] === 'marrison-installer') {
-                    $menu[$key][0] .= ' <span class="marrison-install-badge awaiting-mod count-' . $update_count . '">' . $update_count . '</span>';
-                    break;
-                }
-            }
-        }
-    }
-
-    public function add_menu_badge_styles() {
-        ?>
-        <style>
-        #toplevel_page_marrison-installer .wp-menu-image img {
-            display: none;
-        }
-        #toplevel_page_marrison-installer .wp-menu-image {
-            background-color: currentColor !important;
-            -webkit-mask-image: url('<?php echo plugin_dir_url(__FILE__) . 'icon.svg'; ?>');
-            mask-image: url('<?php echo plugin_dir_url(__FILE__) . 'icon.svg'; ?>');
-            -webkit-mask-repeat: no-repeat;
-            mask-repeat: no-repeat;
-            -webkit-mask-position: center;
-            mask-position: center;
-            -webkit-mask-size: 20px auto;
-            mask-size: 20px auto;
-        }
-
-        .marrison-install-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, #d63638 0%, #c72c2f 100%);
-            color: #fff;
-            font-size: 9px;
-            line-height: 17px;
-            font-weight: 700;
-            margin: 1px 0 0 2px;
-            vertical-align: top;
-            border-radius: 10px;
-            z-index: 26;
-            min-width: 7px;
-            padding: 0 6px;
-            text-align: center;
-            box-shadow: 0 2px 4px rgba(214, 54, 56, 0.3);
-        }
-        
-        #adminmenu .marrison-install-badge {
-            position: relative;
-            top: -1px;
-            left: 2px;
-        }
-        
-        #adminmenu .wp-submenu a[href="admin.php?page=marrison-installer"] {
-            position: relative;
-        }
-        
-        #adminmenu .wp-submenu a[href="admin.php?page=marrison-installer"]:after {
-            content: "";
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 8px;
-            height: 8px;
-            background-color: #d63638;
-            border-radius: 50%;
-            display: <?php echo get_option('marrison_available_installs_count', 0) > 0 ? 'block' : 'none'; ?>;
-            box-shadow: 0 0 0 2px rgba(214, 54, 56, 0.2);
-        }
-        </style>
-        <?php
-    }
-
-    public function check_for_updates($transient) {
-        if (!is_object($transient)) $transient = new stdClass();
-        
-        if (!isset($transient->response)) $transient->response = [];
-        if (!isset($transient->no_update)) $transient->no_update = [];
-        if (!isset($transient->checked)) $transient->checked = [];
-
-        // Check for other plugins using trait logic
-        $transient = $this->trait_check_for_updates($transient);
-
-        // Check for self update
-        $this->check_self_update($transient);
-
-        return $transient;
-    }
-
-    private function check_self_update($transient) {
-        $plugin_file = plugin_basename(__FILE__);
-        $plugins = get_plugins();
-
-        if (!isset($plugins[$plugin_file])) return;
-
-        $installed = $plugins[$plugin_file]['Version'];
-        $remote = $this->get_github_version();
-
-        $item = (object)[
-            'id'          => 'marrison-custom-installer',
-            'slug'        => 'marrison-custom-installer',
-            'plugin'      => $plugin_file,
-            'new_version' => $remote,
-            'url'         => 'https://github.com/marrisonlab/marrison-custom-installer',
-            'package'     => 'https://github.com/marrisonlab/marrison-custom-installer/archive/refs/tags/v' . $remote . '.zip',
-            'tested'      => '6.9',
-            'requires_php' => '7.4',
-            'icons'       => [],
-            'banners'     => [],
-            'banners_rtl' => [],
-            'compatibility' => new stdClass(),
-        ];
-
-        if (version_compare($installed, $remote, '<')) {
-            $transient->response[$plugin_file] = $item;
-        } else {
-            $transient->no_update[$plugin_file] = $item;
-        }
-
-        $transient->checked[$plugin_file] = $installed;
-    }
-
-    private function get_github_version() {
-        $cached = get_transient('marrison_installer_github_version');
-        if ($cached !== false) return $cached;
-
-        $response = wp_remote_get('https://api.github.com/repos/marrisonlab/marrison-custom-installer/releases/latest', [
-            'timeout' => 10,
-            'headers' => [
-                'Accept' => 'application/vnd.github.v3+json',
-                'User-Agent' => 'WordPress/MarrisonCustomInstaller'
-            ]
-        ]);
-
-        if (is_wp_error($response)) return false;
-
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        if (empty($body['tag_name'])) return false;
-
-        $version = str_replace('v', '', $body['tag_name']);
-        set_transient('marrison_installer_github_version', $version, 6 * HOUR_IN_SECONDS);
-
-        return $version;
     }
 
     public function plugin_info($false, $action, $args) {
@@ -542,11 +353,11 @@ class Marrison_Custom_Installer_Plugin {
         
         wp_enqueue_script('jquery');
         wp_enqueue_style('dashicons');
-        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.1.5');
+        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.1.7');
         
         wp_add_inline_script('jquery', '
             jQuery(document).ready(function($) {
-                $(document).on("click", ".mci-table a.mci-ajax-action", function(e) {
+                $(document).on("click", ".mci-plugin-grid a.mci-ajax-action", function(e) {
                     e.preventDefault();
                     var url = $(this).attr("href");
                     var parts = url.split("?");
@@ -640,20 +451,17 @@ class Marrison_Custom_Installer_Plugin {
 
                 $("#mci-plugin-search").on("input", function() {
                     var q = ($(this).val() || "").toString().toLowerCase().trim();
-                    $(".mci-table tbody#the-list tr").each(function() {
-                        var $row = $(this);
-                        if ($row.hasClass("plugin-update-tr")) return;
-                        var hay = ($row.data("search") || "").toString().toLowerCase();
+                    $("#the-list .mci-plugin-item").each(function() {
+                        var $item = $(this);
+                        var hay = ($item.data("search") || "").toString().toLowerCase();
                         var match = !q || hay.indexOf(q) !== -1;
-                        $row.toggle(match);
-                        var $updateRow = $row.next(".plugin-update-tr");
-                        if ($updateRow.length) $updateRow.toggle(match);
+                        $item.toggle(match);
                     });
                 });
 
                 function startProgress() {
                     $("#marrison-progress-container").slideDown();
-                    $(".mci-dashboard-grid, .mci-header-actions").css("opacity", "0.5").css("pointer-events", "none");
+                    $(".mci-dashboard-content, .mci-header-actions").css("opacity", "0.5").css("pointer-events", "none");
                     $("html, body").animate({
                         scrollTop: $(".mci-wrap").offset().top
                     }, 500);
@@ -667,7 +475,7 @@ class Marrison_Custom_Installer_Plugin {
                 
                 function showError(msg) {
                     $("#marrison-progress-container").removeClass("mci-progress-container").addClass("mci-notice mci-notice-error").html("<p>Error: " + msg + "</p>");
-                    $(".mci-dashboard-grid, .mci-header-actions").css("opacity", "1").css("pointer-events", "auto");
+                    $(".mci-dashboard-content, .mci-header-actions").css("opacity", "1").css("pointer-events", "auto");
                 }
             });
         ');
@@ -680,7 +488,7 @@ class Marrison_Custom_Installer_Plugin {
             'manage_options',
             'marrison-installer',
             [$this,'admin_page'],
-            plugin_dir_url(__FILE__) . 'icon.svg',
+            'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4NCjwhLS0gR2VuZXJhdG9yOiBBZG9iZSBJbGx1c3RyYXRvciAyNS4wLjAsIFNWRyBFeHBvcnQgUGx1Zy1JbiAuIFNWRyBWZXJzaW9uOiA2LjAwIEJ1aWxkIDApICAtLT4NCjxzdmcgdmVyc2lvbj0iMS4xIiBpZD0iTGl2ZWxsb18xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCINCgkgdmlld0JveD0iMCAwIDEzMDAgMTMwMCIgc3R5bGU9ImVuYWJsZS1iYWNrZ3JvdW5kOm5ldyAwIDAgMTMwMCAxMzAwOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+DQo8Zz4NCgk8cGF0aCBkPSJNNjUwLDExLjFDMjk3LjEsMTEuMSwxMS4xLDI5Ny4xLDExLjEsNjUwczI4Ni4xLDYzOC45LDYzOC45LDYzOC45czYzOC45LTI4Ni4xLDYzOC45LTYzOC45UzEwMDIuOSwxMS4xLDY1MCwxMS4xeg0KCQkgTTQ0OC43LDg1My4zbC0yNS44LTkzLjlIMjkzbC0yMy40LDkzLjlIMTQ0LjJMMjc0LDM4OS43aDE3MS45bDEzNS43LDQ2My41SDQ0OC43eiBNOTk2LjIsODUzLjNWNzAzLjJjMC03MS45LDEuNC0xNzAuMywzLjQtMjI1LjINCgkJaC00LjNjLTE3LjUsMTAwLjMtNTAuMiwyNTQuOS04MC4yLDM3NS4zSDgxMi40Yy0yMy4yLTExNC45LTU0LjktMjczLjEtNzEuMS0zNzUuMmgtNC41YzMuNiw1NC4yLDUuOSwxNDguOSw1LjksMjI4Ljh2MTQ2LjRINjI4LjYNCgkJVjM4OS43aDE4My45YzIxLDgzLjcsNDguNSwyMjcuMSw1Ny44LDI5NC42aDIuM2MxMC42LTcyLjcsNDIuOC0xOTkuMyw2Ny41LTI5NC42aDE3OC41djQ2My41SDk5Ni4yeiIvPg0KCTxwYXRoIGQ9Ik0zNTUuNCw0NzUuNWMtOS40LDUxLTI1LjIsMTE4LjItNDIuNSwxODQuM2g4OWMtMTguOC02OS43LTM0LjktMTM2LjYtNDQuNS0xODQuM0gzNTUuNHoiLz4NCjwvZz4NCjwvc3ZnPg0K',
             30
         );
 
@@ -792,6 +600,7 @@ class Marrison_Custom_Installer_Plugin {
     public function admin_page() {
         $installs = $this->get_available_updates();
         $installed_plugins = get_plugins();
+        $active_plugins_option = get_option('active_plugins');
         ?>
         <div class="mci-wrap">
             <div class="mci-header">
@@ -803,16 +612,16 @@ class Marrison_Custom_Installer_Plugin {
                     </div>
                     <form id="marrison-bulk-form" method="post" style="display:inline;">
                         <?php wp_nonce_field('marrison_bulk_install'); ?>
-                        <button type="submit" class="button button-primary">Aggiorna Selezionati</button>
+                        <button type="submit" class="button button-primary mci-button">Installa Selezionati</button>
                     </form>
                     <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="display:inline;">
                         <input type="hidden" name="action" value="marrison_force_check_mci">
                         <?php wp_nonce_field('marrison_force_check_mci'); ?>
-                        <button type="submit" class="button button-secondary">
-                            <span class="dashicons dashicons-update"></span> Controlla aggiornamenti MCI
+                        <button type="submit" class="button button-secondary mci-button">
+                            <span class="dashicons dashicons-update"></span> Ricarica Lista
                         </button>
                     </form>
-                    <a href="<?php echo admin_url('admin.php?page=marrison-installer-settings'); ?>" class="button button-secondary">
+                    <a href="<?php echo admin_url('admin.php?page=marrison-installer-settings'); ?>" class="button button-secondary mci-button">
                         <span class="dashicons dashicons-admin-settings"></span> Impostazioni
                     </a>
                 </div>
@@ -830,17 +639,17 @@ class Marrison_Custom_Installer_Plugin {
 
             <?php if (isset($_GET['updated'])): ?>
                 <div class="mci-notice mci-notice-success">
-                    <span class="dashicons dashicons-yes-alt"></span> Plugin <strong><?php echo esc_html($_GET['updated']); ?></strong> installato/aggiornato con successo!
+                    <span class="dashicons dashicons-yes-alt"></span> Plugin <strong><?php echo esc_html($_GET['updated']); ?></strong> installato con successo!
                 </div>
             <?php endif; ?>
             
             <?php if (isset($_GET['mci_checked'])): ?>
                 <div class="mci-notice mci-notice-success">
-                    <span class="dashicons dashicons-yes-alt"></span> Controllo aggiornamenti MCI completato.
+                    <span class="dashicons dashicons-yes-alt"></span> Lista aggiornata.
                 </div>
             <?php endif; ?>
 
-            <div class="mci-dashboard-grid">
+            <div class="mci-dashboard-content">
                     <?php if (empty($installs)): ?>
                         <div class="mci-card mci-empty-state">
                             <span class="dashicons dashicons-info"></span>
@@ -848,113 +657,63 @@ class Marrison_Custom_Installer_Plugin {
                             <a href="<?php echo admin_url('admin.php?page=marrison-installer-settings'); ?>">Controlla URL Repository</a>
                         </div>
                     <?php else: ?>
-                        <table class="wp-list-table widefat striped plugins mci-table">
-                            <thead>
-                                <tr>
-                                    <td id="cb" class="manage-column column-cb check-column">
-                                        <input type="checkbox" id="mci-select-all" />
-                                    </td>
-                                    <th scope="col" class="manage-column column-name">Plugin</th>
-                                    <th scope="col" class="manage-column column-description">Dettagli</th>
-                                </tr>
-                            </thead>
-                            <tbody id="the-list">
-                                <?php 
-                                $active_plugins = get_option('active_plugins');
-                                $updates = get_site_transient('update_plugins');
-                                foreach ($installs as $plugin): 
-                                    $slug = $plugin['slug'];
-                                    $is_installed = false;
-                                    $current_version = '';
-                                    $plugin_file = '';
-                                    $needs_update = false;
-                                    $plugin_description = $plugin['description'] ?? '';
-
-                                    foreach ($installed_plugins as $file => $data) {
-                                        $dir = dirname($file);
-                                        if ($dir === '.' || $dir === '') $dir = basename($file, '.php');
-                                        
-                                        if ($dir === $slug) {
-                                            $is_installed = true;
-                                            $current_version = $data['Version'];
-                                            $plugin_file = $file;
-                                            if (version_compare($current_version, $plugin['version'], '<')) {
-                                                $needs_update = true;
-                                            }
-                                            break;
-                                        }
-                                    }
+                        <div class="mci-select-all-wrap">
+                             <label><input type="checkbox" id="mci-select-all" /> Seleziona tutto</label>
+                        </div>
+                        <div class="mci-plugin-grid" id="the-list">
+                            <?php 
+                            foreach ($installs as $plugin): 
+                                $slug = $plugin['slug'];
+                                $is_installed = false;
+                                $is_active = false;
+                                $current_version = '';
+                                
+                                foreach ($installed_plugins as $file => $data) {
+                                    $dir = dirname($file);
+                                    if ($dir === '.' || $dir === '') $dir = basename($file, '.php');
                                     
-                                    if ($slug === 'marrison-custom-installer') {
-                                        $mci_remote = $this->get_github_version();
-                                        if ($mci_remote && version_compare($current_version, $mci_remote, '<')) {
-                                            $plugin['version'] = $mci_remote;
-                                            $needs_update = true;
+                                    if ($dir === $slug) {
+                                        $is_installed = true;
+                                        $current_version = $data['Version'];
+                                        if (in_array($file, $active_plugins_option)) {
+                                            $is_active = true;
                                         }
+                                        break;
                                     }
-
-                                    $update_info = null;
-                                    if ($needs_update && !empty($plugin_file) && isset($updates->response[$plugin_file])) {
-                                        $update_info = $updates->response[$plugin_file];
-                                    }
-                                    
-                                    $row_class = $needs_update ? 'update' : '';
-                                    $active_class = $is_installed && in_array($plugin_file, $active_plugins) ? 'active' : 'inactive';
-                                ?>
-                                    <tr class="<?php echo $active_class; ?> <?php echo $row_class; ?>" data-slug="<?php echo esc_attr($slug); ?>" data-search="<?php echo esc_attr(trim(($plugin['name'] ?? '') . ' ' . $slug . ' ' . $plugin_description)); ?>">
-                                        <th scope="row" class="check-column">
-                                            <input type="checkbox" name="plugins[]" value="<?php echo esc_attr($slug); ?>" class="mci-bulk-checkbox" <?php if ($needs_update) echo 'checked'; ?>>
-                                        </th>
-                                        <td class="plugin-title column-primary">
-                                            <div class="mci-plugin-name">
-                                                <strong><?php echo esc_html($plugin['name']); ?></strong>
-                                                <?php if ($needs_update): ?>
-                                                    <span class="mci-pill mci-pill-update">Aggiornamento</span>
-                                                <?php elseif ($is_installed): ?>
-                                                    <span class="mci-pill mci-pill-installed">Installato</span>
-                                                <?php else: ?>
-                                                    <span class="mci-pill mci-pill-available">Disponibile</span>
-                                                <?php endif; ?>
-                                            </div>
-                                            <div class="row-actions">
-                                                <?php if ($needs_update): ?>
-                                                    <span class="update"><a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_install_plugin&slug=' . $slug), 'marrison_install_' . $slug); ?>" class="update-link mci-ajax-action">Aggiorna</a></span>
-                                                <?php elseif ($is_installed): ?>
-                                                    <span class="reinstall"><a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_install_plugin&slug=' . $slug), 'marrison_install_' . $slug); ?>" class="mci-ajax-action">Reinstalla</a></span>
-                                                <?php else: ?>
-                                                    <span class="install"><a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_install_plugin&slug=' . $slug), 'marrison_install_' . $slug); ?>" class="mci-ajax-action">Installa</a></span>
-                                                <?php endif; ?>
-                                            </div>
-                                        </td>
-                                        <td class="column-description desc">
-                                            <?php if (!empty($plugin_description)): ?>
-                                                <div class="mci-desc"><?php echo esc_html($plugin_description); ?></div>
+                                }
+                                
+                                $status_class = 'mci-status-available';
+                                if ($is_active) {
+                                    $status_class = 'mci-status-active';
+                                } elseif ($is_installed) {
+                                    $status_class = 'mci-status-installed';
+                                }
+                            ?>
+                                <div class="mci-plugin-item <?php echo $status_class; ?>" data-slug="<?php echo esc_attr($slug); ?>" data-search="<?php echo esc_attr(trim(($plugin['name'] ?? '') . ' ' . $slug)); ?>">
+                                    <div class="mci-item-check">
+                                        <input type="checkbox" name="plugins[]" value="<?php echo esc_attr($slug); ?>" class="mci-bulk-checkbox">
+                                    </div>
+                                    <div class="mci-item-content">
+                                        <div class="mci-item-header">
+                                            <strong><?php echo esc_html($plugin['name']); ?></strong>
+                                        </div>
+                                        <div class="mci-item-meta">
+                                            v<?php echo esc_html($plugin['version']); ?>
+                                            <?php if ($is_installed): ?>
+                                                <span class="mci-dot">·</span> Inst: v<?php echo esc_html($current_version); ?>
                                             <?php endif; ?>
-                                            <div class="mci-meta">
-                                                Repo: <strong>v<?php echo esc_html($plugin['version']); ?></strong>
-                                                <?php if ($is_installed): ?>
-                                                    <span class="mci-dot">·</span> Installata: <strong>v<?php echo esc_html($current_version); ?></strong>
-                                                <?php endif; ?>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <?php if ($needs_update && $update_info): ?>
-                                    <tr class="plugin-update-tr <?php echo $active_class; ?>">
-                                        <td colspan="3" class="plugin-update colspanchange">
-                                            <div class="update-message notice inline notice-warning notice-alt">
-                                                <p>
-                                                    È disponibile una nuova versione (<?php echo esc_html($update_info->new_version); ?>).
-                                                    <a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_install_plugin&slug=' . $slug), 'marrison_install_' . $slug); ?>" class="update-link mci-ajax-action">Aggiorna ora</a>.
-                                                </p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <?php endif; ?>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
+                                        </div>
+                                    </div>
+                                    <div class="mci-item-actions">
+                                         <a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_install_plugin&slug=' . $slug), 'marrison_install_' . $slug); ?>" class="button mci-button-sm mci-ajax-action">
+                                            <?php echo $is_installed ? 'Reinstalla' : 'Installa'; ?>
+                                         </a>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
                     <?php endif; ?>
-                </div>
+            </div>
         </div>
         <?php
     }
