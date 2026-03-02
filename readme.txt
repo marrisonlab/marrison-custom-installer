@@ -1,4 +1,4 @@
-=== Marrison Custom Installer ===
+=== Wp Master Installer ===
 Contributors: Angelo Marra
 Tags: installer, plugin-manager, custom-repository
 Requires at least: 6.0

@@ -29,38 +29,54 @@
 }
 
 .mci-header {
+    height: 120px;
+    background: linear-gradient(to top right, #3f2154, #11111e);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 0 40px;
     margin-bottom: 20px;
-    background: transparent;
-    padding: 0;
-    border: none;
-    box-shadow: none;
-}
-
-.mci-header h1 {
-    margin: 0;
-    font-size: 24px;
-    font-weight: 700;
-    color: #1d2327;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.mci-header h1 .dashicons {
-    background: var(--mci-primary);
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     color: #fff;
-    padding: 8px;
-    border-radius: 8px;
-    font-size: 24px;
-    width: 24px;
-    height: 24px;
+    box-sizing: border-box;
+}
+
+.mci-header-title .mci-title-text {
+    color: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 28px !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+}
+
+.mci-header-logo {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     justify-content: center;
-    box-shadow: 0 4px 6px rgba(34, 113, 177, 0.2);
+}
+
+.mci-header-logo img {
+    width: 180px;
+    height: auto;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.marrison-link {
+    color: #fd5ec0 !important;
+    font-size: 11px !important;
+    text-decoration: none !important;
+    font-weight: 400 !important;
+    font-style: italic !important;
+    transition: color 0.2s ease;
+}
+
+.marrison-link:hover {
+    color: #fff !important;
+    text-decoration: underline !important;
 }
 
 .mci-header-actions {
@@ -214,7 +230,9 @@
 }
 
 /* Buttons */
-.mci-button {
+.mci-button,
+.mci-button-primary,
+.mci-button-secondary {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center;
@@ -226,14 +244,25 @@
     cursor: pointer;
     text-decoration: none;
     transition: all 0.2s;
-    border: none;
+    border: none !important;
     font-size: 13px;
     line-height: normal !important;
     box-sizing: border-box;
     vertical-align: middle;
+    background-color: #874abd !important;
+    color: #ffffff !important;
 }
 
-.mci-button .dashicons {
+.mci-button:hover,
+.mci-button-primary:hover,
+.mci-button-secondary:hover {
+    background-color: #e556b1 !important;
+    color: #ffffff !important;
+}
+
+.mci-button .dashicons,
+.mci-button-primary .dashicons,
+.mci-button-secondary .dashicons {
     font-size: 18px !important;
     width: 18px !important;
     height: 18px !important;
@@ -245,26 +274,6 @@
     padding: 0 !important;
     position: static !important;
     color: inherit;
-}
-
-.mci-button-primary {
-    background: var(--mci-primary);
-    color: white;
-}
-
-.mci-button-primary:hover {
-    background: var(--mci-primary-hover);
-    color: white;
-}
-
-.mci-button-secondary {
-    background: white;
-    border: 1px solid var(--mci-primary);
-    color: var(--mci-primary);
-}
-
-.mci-button-secondary:hover {
-    background: #f0f6fc;
 }
 
 .mci-button-sm {

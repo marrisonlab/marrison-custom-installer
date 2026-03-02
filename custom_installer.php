@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Marrison Custom Installer
+ * Plugin Name: Wp Master Installer
  * Plugin URI:  https://github.com/marrisonlab/marrison-custom-installer
  * Description: This plugin is used to install plugins from a personal repository.
- * Version: 2.1.7
+ * Version: 2.1.8
  * Author: Angelo Marra
  * Author URI:  https://marrisonlab.com
  */
@@ -30,6 +30,7 @@ class Marrison_Custom_Installer_Plugin {
         add_action('admin_post_marrison_clear_cache', [$this, 'clear_cache']);
         add_action('admin_post_marrison_save_repo_url', [$this, 'save_repo_url']);
         add_action('admin_post_marrison_download_repo_file', [$this, 'download_repo_file']);
+        add_action('admin_post_marrison_force_check_mci', [$this, 'force_check_mci']);
         
         add_action('wp_ajax_marrison_install_plugin_ajax', [$this, 'install_plugin_ajax']);
         add_action('wp_ajax_marrison_bulk_install_ajax', [$this, 'bulk_install_ajax']);
@@ -199,7 +200,12 @@ class Marrison_Custom_Installer_Plugin {
         check_admin_referer('marrison_force_check_mci');
         
         delete_transient('marrison_installer_github_version');
+        delete_transient('marrison_available_updates_v2'); // Ensure our cache is cleared too
         delete_site_transient('update_plugins');
+        
+        // Force refresh of available plugins list
+        $this->get_available_updates();
+
         wp_clean_plugins_cache(true);
         wp_update_plugins();
         
@@ -601,10 +607,13 @@ class Marrison_Custom_Installer_Plugin {
         $installs = $this->get_available_updates();
         $installed_plugins = get_plugins();
         $active_plugins_option = get_option('active_plugins');
+        $logo_url = plugin_dir_url(__FILE__) . 'assets/logo.svg';
         ?>
         <div class="mci-wrap">
+            <!-- Invisible H1 to catch WordPress notifications -->
+            <h1 class="wp-heading-inline" style="display:none;"></h1>
+            
             <div class="mci-header">
-                <h1><span class="dashicons dashicons-download"></span> Marrison Installer</h1>
                 <div class="mci-header-actions">
                     <div class="mci-search">
                         <span class="dashicons dashicons-search"></span>
@@ -624,6 +633,10 @@ class Marrison_Custom_Installer_Plugin {
                     <a href="<?php echo admin_url('admin.php?page=marrison-installer-settings'); ?>" class="button button-secondary mci-button">
                         <span class="dashicons dashicons-admin-settings"></span> Impostazioni
                     </a>
+                </div>
+                <div class="mci-header-logo">
+                    <img src="<?php echo esc_url($logo_url); ?>" alt="Marrison Logo">
+                    <a href="https://marrisonlab.com" target="_blank" class="marrison-link">Powered by Marrisonlab</a>
                 </div>
             </div>
 
