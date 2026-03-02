@@ -23,6 +23,9 @@ GitHub Repository: https://github.com/marrisonlab/marrison-custom-installer
 
 == Changelog ==
 
+= 2.1.8 =
+* Fix: Applied correct CSS class to action buttons for proper alignment
+
 = 2.1.7 =
 * UI improvements: Fixed button icon alignment
 * UI improvements: Standardized search bar styling

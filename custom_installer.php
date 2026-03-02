@@ -353,7 +353,7 @@ class Marrison_Custom_Installer_Plugin {
         
         wp_enqueue_script('jquery');
         wp_enqueue_style('dashicons');
-        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.1.7');
+        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.1.8');
         
         wp_add_inline_script('jquery', '
             jQuery(document).ready(function($) {
