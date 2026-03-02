@@ -28,6 +28,28 @@
     box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
 
+.mci-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #f0f0f1;
+    padding-bottom: 10px;
+}
+
+.mci-card-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mci-card-title .dashicons {
+    color: var(--mci-primary);
+}
+
 .mci-header {
     height: 120px;
     background: linear-gradient(to top right, #3f2154, #11111e);
@@ -232,7 +254,8 @@
 /* Buttons */
 .mci-button,
 .mci-button-primary,
-.mci-button-secondary {
+.mci-button-secondary,
+.mci-button-sm {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center;
@@ -255,14 +278,16 @@
 
 .mci-button:hover,
 .mci-button-primary:hover,
-.mci-button-secondary:hover {
+.mci-button-secondary:hover,
+.mci-button-sm:hover {
     background-color: #e556b1 !important;
     color: #ffffff !important;
 }
 
 .mci-button .dashicons,
 .mci-button-primary .dashicons,
-.mci-button-secondary .dashicons {
+.mci-button-secondary .dashicons,
+.mci-button-sm .dashicons {
     font-size: 18px !important;
     width: 18px !important;
     height: 18px !important;
@@ -279,11 +304,26 @@
 .mci-button-sm {
     padding: 4px 10px;
     font-size: 12px;
+    height: auto !important;
+    min-height: 28px;
 }
 
 .mci-button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+/* Plugin Grid Buttons Override */
+.mci-plugin-grid .mci-button-sm {
+    background-color: transparent !important;
+    border: 1px solid #874abd !important;
+    color: #874abd !important;
+}
+
+.mci-plugin-grid .mci-button-sm:hover {
+    background-color: transparent !important;
+    border: 1px solid #fd5ec0 !important;
+    color: #fd5ec0 !important;
 }
 
 /* Progress Bar */

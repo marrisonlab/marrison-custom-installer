@@ -1,10 +1,10 @@
-=== Wp Master Installer ===
+=== WP Master Installer ===
 Contributors: Angelo Marra
 Tags: installer, plugin-manager, custom-repository
 Requires at least: 6.0
 Tested up to: 6.9.1
 Requires PHP: 7.4
-Stable tag: 2.1.7
+Stable tag: 2.1.10
 License: GPL-3.0+
 License URI: https://www.gnu.org/licenses/gpl-3.0.txt
 
@@ -22,6 +22,14 @@ GitHub Repository: https://github.com/marrisonlab/marrison-custom-installer
 3. Upload the plugin to WordPress and activate it.
 
 == Changelog ==
+
+= 2.1.10 =
+* Fix: Risolto conflitto link impostazioni con Marrison Custom Updater
+* UI: Rinomina voce menu in WPMI
+* UI: Correzioni CSS e layout pagina impostazioni
+
+= 2.1.9 =
+* Fix: Caricamento CSS pagina impostazioni
 
 = 2.1.8 =
 * Fix: Applied correct CSS class to action buttons for proper alignment

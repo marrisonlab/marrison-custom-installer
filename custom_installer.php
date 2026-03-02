@@ -1,10 +1,10 @@
 <?php
 /**
- * Plugin Name: Wp Master Installer
+ * Plugin Name: WP Master Installer
  * Plugin URI:  https://github.com/marrisonlab/marrison-custom-installer
  * Description: This plugin is used to install plugins from a personal repository.
- * Version: 2.1.8
- * Author: Angelo Marra
+ * Version: 2.1.10
+ * Author: Marrisonlab
  * Author URI:  https://marrisonlab.com
  */
 
@@ -36,7 +36,7 @@ class Marrison_Custom_Installer_Plugin {
         add_action('wp_ajax_marrison_bulk_install_ajax', [$this, 'bulk_install_ajax']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
         
-        add_filter('plugin_action_links', [$this, 'add_marrison_action_links'], 10, 2);
+        add_filter('plugin_action_links', [$this, 'add_marrison_action_links'], 20, 2);
         add_filter('plugin_row_meta', [$this, 'add_plugin_row_meta'], 10, 2);
     }
 
@@ -130,7 +130,13 @@ class Marrison_Custom_Installer_Plugin {
     }
 
     public function add_marrison_action_links($actions, $plugin_file) {
-        if (strpos($plugin_file, 'custom_installer.php') === false && strpos($plugin_file, 'marrison') === false) {
+        // Evita di sovrascrivere il link per il plugin updater
+        if (strpos($plugin_file, 'custom_updater.php') !== false) {
+            return $actions;
+        }
+
+        // Controlla se è il file del plugin Marrison Custom Installer
+        if (strpos($plugin_file, 'custom_installer.php') === false && strpos($plugin_file, 'marrison-custom-installer') === false) {
             return $actions;
         }
 
@@ -262,6 +268,7 @@ class Marrison_Custom_Installer_Plugin {
     public function install_plugin_ajax() {
         $slug = sanitize_text_field($_POST['slug'] ?? '');
         $nonce = sanitize_text_field($_POST['nonce'] ?? '');
+        $activate = isset($_POST['activate']) && $_POST['activate'] === 'true';
         
         $nonce_valid = wp_verify_nonce($nonce, 'marrison_install_' . $slug) || 
                        wp_verify_nonce($nonce, 'marrison_bulk_install') ||
@@ -290,7 +297,30 @@ class Marrison_Custom_Installer_Plugin {
         if (is_wp_error($result)) {
             wp_send_json_error($result->get_error_message());
         } elseif ($result) {
-            wp_send_json_success('Plugin aggiornato con successo');
+            if ($activate) {
+                // Ensure get_plugins() is available
+                if (!function_exists('get_plugins')) {
+                    require_once ABSPATH . 'wp-admin/includes/plugin.php';
+                }
+                // Refresh cache to find the new plugin
+                wp_clean_plugins_cache(true);
+                
+                $plugin_file = $this->find_plugin_file($slug);
+                
+                if ($plugin_file) {
+                    $activate_result = activate_plugin($plugin_file);
+                    
+                    if (is_wp_error($activate_result)) {
+                        wp_send_json_success('Plugin installato, ma errore durante l\'attivazione: ' . $activate_result->get_error_message());
+                    } else {
+                        wp_send_json_success('Plugin installato e attivato con successo');
+                    }
+                } else {
+                    wp_send_json_success('Plugin installato, ma impossibile trovare il file per l\'attivazione');
+                }
+            } else {
+                wp_send_json_success('Plugin aggiornato con successo');
+            }
             $this->check_available_installs();
         } else {
             wp_send_json_error('Errore durante l\'aggiornamento del plugin');
@@ -353,13 +383,13 @@ class Marrison_Custom_Installer_Plugin {
     }
 
     public function enqueue_admin_scripts($hook) {
-        if ($hook !== 'toplevel_page_marrison-installer' && $hook !== 'marrison-installer_page_marrison-installer-settings') {
+        if (strpos($hook, 'marrison-installer') === false) {
             return;
         }
         
         wp_enqueue_script('jquery');
         wp_enqueue_style('dashicons');
-        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.1.8');
+        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.1.10');
         
         wp_add_inline_script('jquery', '
             jQuery(document).ready(function($) {
@@ -372,11 +402,16 @@ class Marrison_Custom_Installer_Plugin {
                     var urlParams = new URLSearchParams(parts[1]);
                     var slug = urlParams.get("slug");
                     var nonce = urlParams.get("_wpnonce");
+                    var activate = urlParams.get("activate");
                     
                     if (!slug || !nonce) return;
                     
                     startProgress();
-                    updateProgress(10, "Inizio installazione di " + slug + "...");
+                    var msg = "Inizio installazione di " + slug + "...";
+                    if (activate === "true") {
+                        msg = "Installazione e attivazione di " + slug + "...";
+                    }
+                    updateProgress(10, msg);
                     
                     $.ajax({
                         url: "' . admin_url('admin-ajax.php') . '",
@@ -384,7 +419,8 @@ class Marrison_Custom_Installer_Plugin {
                         data: {
                             action: "marrison_install_plugin_ajax",
                             slug: slug,
-                            nonce: nonce
+                            nonce: nonce,
+                            activate: activate
                         },
                         success: function(response) {
                             if (response.success) {
@@ -489,8 +525,8 @@ class Marrison_Custom_Installer_Plugin {
 
     public function add_admin_menu() {
         add_menu_page(
-            'Marrison Installer',
-            'AM Installer',
+            'Wp Master Installer',
+            'WPMI',
             'manage_options',
             'marrison-installer',
             [$this,'admin_page'],
@@ -520,10 +556,20 @@ class Marrison_Custom_Installer_Plugin {
     public function settings_page() {
         $settingsUpdated = $_GET['settings-updated'] ?? '';
         $active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'general';
+        $logo_url = plugin_dir_url(__FILE__) . 'assets/logo.svg';
         ?>
         <div class="mci-wrap">
+            <!-- Invisible H1 to catch WordPress notifications and prevent them from being injected into our custom header -->
+            <h1 class="wp-heading-inline" style="display:none;"></h1>
+            
             <div class="mci-header">
-                <h1><span class="dashicons dashicons-admin-settings"></span> Impostazioni Marrison Installer</h1>
+                <div class="mci-header-title">
+                    <div class="mci-title-text">Impostazioni</div>
+                </div>
+                <div class="mci-header-logo">
+                    <img src="<?php echo esc_url($logo_url); ?>" alt="Marrison Logo">
+                    <a href="https://marrisonlab.com" target="_blank" class="marrison-link">Powered by Marrisonlab</a>
+                </div>
             </div>
             
             <h2 class="nav-tab-wrapper" style="margin-bottom: 20px;">
@@ -555,7 +601,9 @@ class Marrison_Custom_Installer_Plugin {
     private function render_general_tab() {
         ?>
         <div class="mci-card">
-            <h3>Repository URL</h3>
+            <div class="mci-card-header">
+                <h2 class="mci-card-title"><span class="dashicons dashicons-database"></span> Impostazioni Repository</h2>
+            </div>
             <p>Inserisci l'URL della cartella dove risiede il file <code>index.php</code> che elenca i plugin.</p>
             <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
                 <input type="hidden" name="action" value="marrison_save_repo_url">
@@ -564,7 +612,7 @@ class Marrison_Custom_Installer_Plugin {
                     <tr>
                         <th scope="row"><label for="marrison_repo_url">URL Repository</label></th>
                         <td>
-                            <input type="url" name="marrison_repo_url" id="marrison_repo_url" value="<?php echo esc_attr(get_option('marrison_repo_url')); ?>" class="regular-text" placeholder="https://example.com/repo/">
+                            <input type="url" name="marrison_repo_url" id="marrison_repo_url" value="<?php echo esc_attr(get_option('marrison_repo_url')); ?>" class="regular-text" placeholder="https://example.com/repo/" style="width: 100%; max-width: 500px;">
                         </td>
                     </tr>
                 </table>
@@ -575,8 +623,10 @@ class Marrison_Custom_Installer_Plugin {
             </form>
         </div>
 
-        <div class="mci-card">
-            <h3>Gestione Cache</h3>
+        <div class="mci-card" style="margin-top: 20px;">
+            <div class="mci-card-header">
+                <h2 class="mci-card-title"><span class="dashicons dashicons-update"></span> Gestione Cache</h2>
+            </div>
             <p>Forza la pulizia della cache degli aggiornamenti.</p>
             <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
                 <input type="hidden" name="action" value="marrison_clear_cache">
@@ -721,6 +771,12 @@ class Marrison_Custom_Installer_Plugin {
                                          <a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_install_plugin&slug=' . $slug), 'marrison_install_' . $slug); ?>" class="button mci-button-sm mci-ajax-action">
                                             <?php echo $is_installed ? 'Reinstalla' : 'Installa'; ?>
                                          </a>
+                                         
+                                         <?php if (!$is_active): ?>
+                                             <a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_install_plugin&slug=' . $slug . '&activate=true'), 'marrison_install_' . $slug); ?>" class="button mci-button-sm mci-ajax-action" style="margin-left: 5px;">
+                                                Installa e Attiva
+                                             </a>
+                                         <?php endif; ?>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
