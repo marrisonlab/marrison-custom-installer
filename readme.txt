@@ -4,7 +4,7 @@ Tags: installer, plugin-manager, custom-repository
 Requires at least: 6.0
 Tested up to: 6.9.1
 Requires PHP: 7.4
-Stable tag: 2.1.10
+Stable tag: 2.1.11
 License: GPL-3.0+
 License URI: https://www.gnu.org/licenses/gpl-3.0.txt
 
@@ -22,6 +22,10 @@ GitHub Repository: https://github.com/marrisonlab/marrison-custom-installer
 3. Upload the plugin to WordPress and activate it.
 
 == Changelog ==
+
+= 2.1.11 =
+* Miglioramento: Barra di avanzamento per installazioni massive ora mostra il progresso reale e il plugin corrente.
+* Miglioramento: Installazione massiva sequenziale per evitare timeout e migliorare la stabilità.
 
 = 2.1.10 =
 * Fix: Risolto conflitto link impostazioni con Marrison Custom Updater

@@ -3,7 +3,7 @@
  * Plugin Name: WP Master Installer
  * Plugin URI:  https://github.com/marrisonlab/marrison-custom-installer
  * Description: This plugin is used to install plugins from a personal repository.
- * Version: 2.1.10
+ * Version: 2.1.11
  * Author: Marrisonlab
  * Author URI:  https://marrisonlab.com
  */
@@ -321,7 +321,6 @@ class Marrison_Custom_Installer_Plugin {
             } else {
                 wp_send_json_success('Plugin aggiornato con successo');
             }
-            $this->check_available_installs();
         } else {
             wp_send_json_error('Errore durante l\'aggiornamento del plugin');
         }
@@ -376,7 +375,6 @@ class Marrison_Custom_Installer_Plugin {
                 'success_count' => $success_count,
                 'total_count' => count($plugins)
             ]);
-            $this->check_available_installs();
         } else {
             wp_send_json_error('Nessun plugin è stato aggiornato');
         }
@@ -389,7 +387,7 @@ class Marrison_Custom_Installer_Plugin {
         
         wp_enqueue_script('jquery');
         wp_enqueue_style('dashicons');
-        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.1.10');
+        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.1.11');
         
         wp_add_inline_script('jquery', '
             jQuery(document).ready(function($) {
@@ -454,30 +452,59 @@ class Marrison_Custom_Installer_Plugin {
                     var nonce = $form.find("input[name=\'_wpnonce\']").val();
                     
                     startProgress();
-                    updateProgress(5, "Preparazione installazione massiva...");
+                    updateProgress(5, "Inizializzazione installazione massiva...");
                     
-                    $.ajax({
-                        url: "' . admin_url('admin-ajax.php') . '",
-                        type: "POST",
-                        data: {
-                            action: "marrison_bulk_install_ajax",
-                            plugins: plugins,
-                            nonce: nonce
-                        },
-                        success: function(response) {
-                            if (response.success) {
-                                updateProgress(100, response.data.message || "Completato!");
-                                setTimeout(function() {
-                                    location.reload();
-                                }, 1000);
-                            } else {
-                                showError(response.data || "Errore sconosciuto");
+                    var total = plugins.length;
+                    var current = 0;
+                    var successCount = 0;
+                    var errors = [];
+                    
+                    function installNext() {
+                        if (current >= total) {
+                            var msg = successCount + " plugin aggiornati con successo.";
+                            if (errors.length > 0) {
+                                msg += " Errori: " + errors.length;
                             }
-                        },
-                        error: function() {
-                            showError("Errore di connessione");
+                            updateProgress(100, msg);
+                            setTimeout(function() {
+                                location.reload();
+                            }, 1000);
+                            return;
                         }
-                    });
+
+                        var slug = plugins[current];
+                        var percent = Math.round((current / total) * 100);
+                        if (percent < 5) percent = 5;
+                        
+                        updateProgress(percent, "Installazione di " + slug + " (" + (current + 1) + "/" + total + ")...");
+                        
+                        $.ajax({
+                            url: "' . admin_url('admin-ajax.php') . '",
+                            type: "POST",
+                            data: {
+                                action: "marrison_install_plugin_ajax",
+                                slug: slug,
+                                nonce: nonce,
+                                activate: "false"
+                            },
+                            success: function(response) {
+                                if (response.success) {
+                                    successCount++;
+                                } else {
+                                    errors.push(slug + ": " + (response.data || "Errore sconosciuto"));
+                                }
+                            },
+                            error: function() {
+                                errors.push(slug + ": Errore di connessione");
+                            },
+                            complete: function() {
+                                current++;
+                                installNext();
+                            }
+                        });
+                    }
+                    
+                    installNext();
                 });
 
                 $("#mci-select-all").on("change", function() {
