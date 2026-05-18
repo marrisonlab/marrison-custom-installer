@@ -208,6 +208,11 @@
     border-left: 4px solid #dcdcde;
 }
 
+.mci-status-update-available {
+    background: #fff9c4; /* Yellow for update available */
+    border-left: 4px solid var(--mci-warning);
+}
+
 .mci-item-check {
     display: flex;
     align-items: center;

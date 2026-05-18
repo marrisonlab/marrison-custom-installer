@@ -9,8 +9,17 @@ $directory = __DIR__;
 // Array per memorizzare i plugin trovati
 $plugins = [];
 
-// Scansiona tutti i file ZIP nella cartella
-$files = glob($directory . '/*.zip');
+// Scansiona tutti i file ZIP ricorsivamente (cartella corrente + sottocartelle)
+$files = [];
+$iterator = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
+    RecursiveIteratorIterator::LEAVES_ONLY
+);
+foreach ($iterator as $file) {
+    if ($file->isFile() && strtolower($file->getExtension()) === 'zip') {
+        $files[] = $file->getPathname();
+    }
+}
 
 foreach ($files as $zip_file) {
     $zip = new ZipArchive();
@@ -90,8 +99,10 @@ foreach ($files as $zip_file) {
                 $slug = $first_dir;
             }
             
-            // URL completo per il download
-            $download_url = 'https://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . '/' . basename($zip_file);
+            // URL completo per il download (preserva il percorso relativo della sottocartella)
+            $relative_path = ltrim(str_replace($directory, '', $zip_file), DIRECTORY_SEPARATOR . '/');
+            $relative_path = str_replace(DIRECTORY_SEPARATOR, '/', $relative_path);
+            $download_url = 'https://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . '/' . $relative_path;
             
             $plugins[] = [
                 'name' => $name ?: 'Unknown Plugin',

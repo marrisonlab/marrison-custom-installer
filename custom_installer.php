@@ -3,7 +3,7 @@
  * Plugin Name: WP Master Installer
  * Plugin URI:  https://github.com/marrisonlab/marrison-custom-installer
  * Description: This plugin is used to install plugins from a personal repository.
- * Version: 2.1.11
+ * Version: 2.1.12
  * Author: Marrisonlab
  * Author URI:  https://marrisonlab.com
  */
@@ -387,7 +387,7 @@ class Marrison_Custom_Installer_Plugin {
         
         wp_enqueue_script('jquery');
         wp_enqueue_style('dashicons');
-        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.1.11');
+        wp_enqueue_style('mci-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '2.1.12');
         
         wp_add_inline_script('jquery', '
             jQuery(document).ready(function($) {
@@ -773,7 +773,10 @@ class Marrison_Custom_Installer_Plugin {
                                 }
                                 
                                 $status_class = 'mci-status-available';
-                                if ($is_active) {
+                                $needs_update = $is_installed && version_compare($current_version, $plugin['version'], '<');
+                                if ($needs_update) {
+                                    $status_class = 'mci-status-update-available';
+                                } elseif ($is_active) {
                                     $status_class = 'mci-status-active';
                                 } elseif ($is_installed) {
                                     $status_class = 'mci-status-installed';
@@ -801,7 +804,7 @@ class Marrison_Custom_Installer_Plugin {
                                          
                                          <?php if (!$is_active): ?>
                                              <a href="<?php echo wp_nonce_url(admin_url('admin-post.php?action=marrison_install_plugin&slug=' . $slug . '&activate=true'), 'marrison_install_' . $slug); ?>" class="button mci-button-sm mci-ajax-action" style="margin-left: 5px;">
-                                                Installa e Attiva
+                                                <?php echo $is_installed ? 'Attiva' : 'Installa e Attiva'; ?>
                                              </a>
                                          <?php endif; ?>
                                     </div>

@@ -4,7 +4,7 @@ Tags: installer, plugin-manager, custom-repository
 Requires at least: 6.0
 Tested up to: 6.9.1
 Requires PHP: 7.4
-Stable tag: 2.1.11
+Stable tag: 2.1.12
 License: GPL-3.0+
 License URI: https://www.gnu.org/licenses/gpl-3.0.txt
 
@@ -22,6 +22,11 @@ GitHub Repository: https://github.com/marrisonlab/marrison-custom-installer
 3. Upload the plugin to WordPress and activate it.
 
 == Changelog ==
+
+= 2.1.12 =
+* UI: Sfondo giallo per plugin con aggiornamento disponibile nel repository
+* UI: Pulsante "Attiva" invece di "Installa e Attiva" per plugin già installati ma non attivi
+* Fix: Aggiornamento versione CSS per forzare reload delle modifiche
 
 = 2.1.11 =
 * Miglioramento: Barra di avanzamento per installazioni massive ora mostra il progresso reale e il plugin corrente.
